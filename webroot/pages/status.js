@@ -11,7 +11,7 @@ const StatusPage = {
 
     // 版本信息
     currentVersion: '20240503',
-    GitHubRepo: 'APMMDEVS/AMMF',
+    GitHubRepo: 'Aurora-Nasa-1/AMMF',
     latestVersion: null,
     updateAvailable: false,
     updateChecking: false,
