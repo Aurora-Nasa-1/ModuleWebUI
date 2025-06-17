@@ -30,6 +30,7 @@ jobs:
           Github_update_repo=Aurora-Nasa-1/AMMF
           MODID=TEST
           MODNAME=TEST
+          bash build.sh
       
       - name: Setup Pages
         uses: actions/configure-pages@v3
