@@ -56,7 +56,8 @@ const AboutPage = {
             this.moduleInfo = preloadedData;
             
             // 注册语言切换处理器
-            I18n.registerLanguageChangeHandler(this.onLanguageChanged.bind(this));
+            this.boundLanguageHandler = this.onLanguageChanged.bind(this);
+            document.addEventListener('languageChanged', this.boundLanguageHandler);
             
             return true;
         } catch (error) {
@@ -66,7 +67,7 @@ const AboutPage = {
     },
 
     // 添加语言切换处理方法
-    onLanguageChanged() {
+    onLanguageChanged(event) {
         const aboutContent = document.querySelector('.about-container');
         if (aboutContent) {
             aboutContent.outerHTML = this.render().trim();
@@ -76,8 +77,11 @@ const AboutPage = {
 
     // 添加清理方法
     onDeactivate() {
-        // 注销语言切换处理器
-        I18n.unregisterLanguageChangeHandler(this.onLanguageChanged.bind(this));
+        // 移除语言变化事件监听器
+        if (this.boundLanguageHandler) {
+            document.removeEventListener('languageChanged', this.boundLanguageHandler);
+            this.boundLanguageHandler = null;
+        }
         // 清理页面操作按钮
         UI.clearPageActions();
     },

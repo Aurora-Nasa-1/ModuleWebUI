@@ -1,6 +1,6 @@
 /**
  * AMMF WebUI 主应用程序
- * 负责页面路由、UI管理和应用状态
+ * 负责页面路由、UI管理、主题管理和应用状态
  */
 
 // 应用程序主类
@@ -11,8 +11,16 @@ class App {
             currentPage: null,
             themeChanging: false,
             headerTransparent: true,
-            pagesConfig: null
+            pagesConfig: null,
+            currentTheme: 'light'
         };
+        
+        // 内部渲染缓存
+        this.renderCache = new Map();
+        this.templateCache = new Map();
+        
+        // 初始化主题
+        this.initTheme();
     }
     // 防抖
     debounce(func, wait) {
@@ -23,68 +31,533 @@ class App {
         };
     }
     
-    // 初始化应用
-    async init() {
-        await I18n.init();
-        ThemeManager.init();
+    /**
+     * 初始化主题系统
+     */
+    initTheme() {
+        // 检测系统主题偏好（包括 Android）
+        const prefersDark = window.matchMedia && (
+            window.matchMedia('(prefers-color-scheme: dark)').matches ||
+            (window.navigator.userAgentData?.platform === 'Android' && 
+             window.navigator.theme === 'dark')
+        );
         
-        // 加载页面配置
-        await this.loadPagesConfig();
+        this.state.currentTheme = prefersDark ? 'dark' : 'light';
         
-        // Initialize CSS loader
-        if (window.CSSLoader) {
-            CSSLoader.init();
-        }
-
-        // 检测是否为MMRL环境并初始化
-        const isMMRLEnvironment = !!window.MMRL;
-        if (isMMRLEnvironment) {
-            MMRL.init();
-            // 降低顶栏高度以适应手机状态栏
-            document.body.classList.add('mmrl-environment');
-        }
-
-        // 添加应用加载完成标记
-        requestAnimationFrame(() => document.body.classList.add('app-loaded'));
-
-        // 初始化语言选择器
-        if (window.I18n?.initLanguageSelector) {
-            I18n.initLanguageSelector();
-        } else {
-            document.addEventListener('i18nReady', () => I18n.initLanguageSelector());
-        }
-
-        // 初始化底栏导航
-        await this.initNavigation();
+        // 立即应用主题
+        this.applyTheme(this.state.currentTheme);
         
-        // 加载页面模块JS文件
-        await this.loadPageModules();
-
-        // 加载初始页面并等待完成
-        const initialPage = Router.getCurrentPage();
-        // 确保在初始化时也调用 onActivate
-        await Router.navigate(initialPage, false, true);
-
-        // 使用 Promise.resolve().then 确保在下一个微任务中执行预加载
-        Promise.resolve().then(() => {
-            // 预加载其他页面，只执行一次
-            if (!this._pagesPreloaded) {
-                Router.preloadPages();
-                this._pagesPreloaded = true;
-            }
-        });
-
-        // 更新加载状态
-        this.state.isLoading = false;
-
-        // 移除加载指示器
-        const loadingContainer = document.querySelector('#main-content .loading-container');
-        if (loadingContainer) {
-            loadingContainer.style.opacity = '0';
-            setTimeout(() => loadingContainer.remove(), 300);
+        // 监听系统主题变化
+        if (window.matchMedia) {
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+                this.setTheme(e.matches ? 'dark' : 'light');
+            });
         }
     }
     
+    /**
+     * 应用主题
+     */
+    applyTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        this.state.currentTheme = theme;
+        
+        // 更新主题颜色元标签
+        const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+        if (metaThemeColor) {
+            const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
+            metaThemeColor.setAttribute('content', primaryColor);
+        }
+        
+        // 更新主题切换按钮图标
+        this.updateThemeToggleIcon();
+        
+        // 触发主题变更事件
+        document.dispatchEvent(new CustomEvent('themeChanged', { 
+            detail: { theme: theme }
+        }));
+    }
+    
+    /**
+     * 设置主题
+     */
+    setTheme(theme) {
+        this.applyTheme(theme);
+    }
+    
+    /**
+     * 切换主题
+     */
+    toggleTheme() {
+        const newTheme = this.state.currentTheme === 'dark' ? 'light' : 'dark';
+        this.setTheme(newTheme);
+    }
+    
+    /**
+     * 更新主题切换按钮图标
+     */
+    updateThemeToggleIcon() {
+        const themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+            const iconElement = themeToggle.querySelector('.material-symbols-rounded');
+            if (iconElement) {
+                iconElement.textContent = this.state.currentTheme === 'dark' ? 'dark_mode' : 'light_mode';
+            }
+            // 更新按钮标题
+            themeToggle.title = I18n?.translate?.('THEME', '主题') || '主题';
+        }
+    }
+    
+    /**
+     * 获取当前主题
+     */
+    getTheme() {
+        return this.state.currentTheme;
+    }
+    
+    /**
+     * 检查是否为深色主题
+     */
+    isDarkTheme() {
+        return this.state.currentTheme === 'dark';
+    }
+    
+    /**
+     * 检查是否为浅色主题
+     */
+    isLightTheme() {
+        return this.state.currentTheme === 'light';
+    }
+    
+    /**
+     * 初始化系统按钮
+     */
+    initSystemButtons() {
+        const systemButtonsContainer = document.getElementById('system-buttons');
+        if (!systemButtonsContainer) {
+            console.warn('系统按钮容器未找到');
+            return;
+        }
+        
+        // 渲染系统按钮
+        const buttonsTemplate = `
+            <button id="language-button" class="icon-button" title="${I18n?.translate?.('LANGUAGE', '语言') || '语言'}">
+                <span class="material-symbols-rounded">translate</span>
+            </button>
+            <button id="theme-toggle" class="icon-button" title="${I18n?.translate?.('THEME', '主题') || '主题'}">
+                <span class="material-symbols-rounded">${this.state.currentTheme === 'dark' ? 'dark_mode' : 'light_mode'}</span>
+            </button>
+        `;
+        
+        systemButtonsContainer.innerHTML = buttonsTemplate;
+        
+        // 绑定事件
+        const themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                this.toggleTheme();
+            });
+        }
+        
+        const languageButton = document.getElementById('language-button');
+        if (languageButton) {
+            languageButton.addEventListener('click', () => {
+                this.showLanguageSelector();
+            });
+        }
+    }
+    
+    /**
+     * 高性能内部模板渲染引擎
+     */
+    renderTemplateInternal(template, context = {}, options = {}) {
+        // 生成缓存键
+        const cacheKey = this.generateCacheKey(template, context);
+        
+        // 检查缓存
+        if (this.renderCache.has(cacheKey) && !options.forceRender) {
+            return this.renderCache.get(cacheKey);
+        }
+        
+        // 执行模板渲染
+        let rendered = template;
+        
+        // 替换 ${key} 形式的变量
+        rendered = rendered.replace(/\${([^}]+)}/g, (match, key) => {
+            try {
+                // 创建一个带有数据对象属性的上下文
+                const renderContext = Object.assign({}, context, {
+                    I18n: window.I18n || { translate: (key, fallback) => fallback },
+                    app: this
+                });
+                
+                // 使用Function构造函数创建一个可以访问上下文的函数
+                const keys = Object.keys(renderContext);
+                const values = Object.values(renderContext);
+                const func = new Function(...keys, `return ${key};`);
+                
+                // 执行函数获取结果
+                return func(...values) ?? '';
+            } catch (error) {
+                console.warn(`模板表达式解析错误: ${key}`, error);
+                return '';
+            }
+        });
+        
+        // 替换 {{key}} 形式的变量（兼容性）
+        rendered = rendered.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
+            const keys = key.trim().split('.');
+            let value = context;
+            
+            for (const k of keys) {
+                value = value?.[k];
+                if (value === undefined) break;
+            }
+            
+            return value !== undefined ? String(value) : match;
+        });
+        
+        // 缓存结果
+        if (options.cache !== false) {
+            this.renderCache.set(cacheKey, rendered);
+        }
+        
+        return rendered;
+    }
+    
+    /**
+     * 批量数据处理
+     */
+    processDataInternal(operation, data, options = {}) {
+        switch (operation) {
+            case 'FILTER':
+                return this.filterData(data.data, data.filter);
+            case 'SORT':
+                return this.sortData(data.data, data.sortBy, data.order);
+            case 'TRANSFORM':
+                return this.transformData(data.data, data.transformer);
+            case 'AGGREGATE':
+                return this.aggregateData(data.data, data.aggregator);
+            default:
+                throw new Error(`未知数据操作: ${operation}`);
+        }
+    }
+    
+    /**
+     * 过滤数据
+     */
+    filterData(data, filter) {
+        if (!Array.isArray(data)) return data;
+        
+        return data.filter(item => {
+            for (const [key, value] of Object.entries(filter)) {
+                if (item[key] !== value) return false;
+            }
+            return true;
+        });
+    }
+    
+    /**
+     * 排序数据
+     */
+    sortData(data, sortBy, order = 'asc') {
+        if (!Array.isArray(data)) return data;
+        
+        return [...data].sort((a, b) => {
+            const aVal = a[sortBy];
+            const bVal = b[sortBy];
+            
+            if (aVal < bVal) return order === 'asc' ? -1 : 1;
+            if (aVal > bVal) return order === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }
+    
+    /**
+     * 转换数据
+     */
+    transformData(data, transformer) {
+        if (typeof transformer === 'function') {
+            return transformer(data);
+        }
+        return data;
+    }
+    
+    /**
+     * 聚合数据
+     */
+    aggregateData(data, aggregator) {
+        if (!Array.isArray(data)) return data;
+        
+        return data.reduce((acc, item) => {
+            return aggregator(acc, item);
+        }, {});
+    }
+    
+    /**
+     * 生成缓存键
+     */
+    generateCacheKey(template, context) {
+        const templateHash = this.simpleHash(template);
+        const contextHash = this.simpleHash(JSON.stringify(context));
+        return `${templateHash}-${contextHash}`;
+    }
+    
+    /**
+     * 简单哈希函数
+     */
+    simpleHash(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // 转换为32位整数
+        }
+        return hash.toString(36);
+    }
+    
+    /**
+     * 清理渲染缓存
+     */
+    clearRenderCache() {
+        this.renderCache.clear();
+        this.templateCache.clear();
+        console.log('渲染缓存已清理');
+    }
+    
+    /**
+     * 重新渲染指定页面
+     * @param {string} pageName - 页面名称
+     */
+    async renderPage(pageName) {
+        if (!pageName || this.state.currentPage !== pageName) {
+            return;
+        }
+        
+        try {
+            // 清理渲染缓存
+            this.clearRenderCache();
+            
+            // 获取页面模块
+            const pageModule = window[Router.modules[pageName]];
+            if (!pageModule) {
+                console.warn(`页面模块未找到: ${pageName}`);
+                return;
+            }
+            
+            // 获取主内容容器
+            const mainContent = document.getElementById('main-content');
+            if (!mainContent) {
+                console.warn('主内容容器未找到');
+                return;
+            }
+            
+            // 调用页面的onDeactivate方法（如果存在）
+            if (typeof pageModule.onDeactivate === 'function') {
+                pageModule.onDeactivate();
+            }
+            
+            // 重新渲染页面内容
+            if (typeof pageModule.render === 'function') {
+                const pageContent = pageModule.render();
+                mainContent.innerHTML = pageContent;
+                
+                // 调用页面的afterRender方法（如果存在）
+                if (typeof pageModule.afterRender === 'function') {
+                    await pageModule.afterRender();
+                }
+                
+                // 重新应用翻译
+                I18n.applyTranslations();
+                
+                // 更新页面操作按钮
+                UI.updatePageActions(pageName);
+                
+                console.log(`页面 ${pageName} 重新渲染完成`);
+            }
+        } catch (error) {
+            console.error(`重新渲染页面 ${pageName} 失败:`, error);
+        }
+    }
+    
+    /**
+     * 获取缓存状态
+     */
+    getCacheStatus() {
+        return {
+            renderCacheSize: this.renderCache.size,
+            templateCacheSize: this.templateCache.size,
+            currentTheme: this.state.currentTheme,
+            isLoading: this.state.isLoading
+        };
+    }
+    
+    // 初始化应用
+    async init() {
+        try {
+            // 第一阶段：立即显示基础UI框架，减少白屏时间
+            this.showInitialUI();
+            
+            // 第二阶段：并行初始化基础组件
+            const [i18nResult, pagesConfig] = await Promise.allSettled([
+                I18n.init(),
+                this.loadPagesConfig()
+            ]);
+            
+            // Initialize CSS loader
+            if (window.CSSLoader) {
+                CSSLoader.init();
+            }
+            
+            // 第三阶段：初始化UI组件（非阻塞）
+            this.initSystemButtons();
+            UI.updateElementReferences();
+            // 第四阶段：并行执行UI初始化任务
+            const [navResult] = await Promise.allSettled([
+                this.initNavigation()
+            ]);
+            
+            // 导航初始化完成后，立即初始化布局管理器
+            if (navResult.status === 'fulfilled') {
+                UI.updateElementReferences();
+                if (window.LayoutManager) {
+                    LayoutManager.init();
+                }
+            }
+            // 第五阶段：加载当前页面（优先级最高）
+            const initialPage = Router.getCurrentPage();
+            await Router.navigate(initialPage, false, true);
+            
+            // 第六阶段：异步完成剩余初始化任务
+            this.completeInitializationAsync(i18nResult);
+            
+            // 第七阶段：完成加载，显示应用
+            this.finishLoading();
+            
+        } catch (error) {
+            console.error('应用初始化失败:', error);
+            this.showInitializationError(error);
+        }
+    }
+    
+    /**
+     * 显示初始UI框架
+     */
+    showInitialUI() {
+        // 立即应用主题，避免闪烁
+        this.applyTheme(this.state.currentTheme);
+    }
+    /**
+     * 异步完成剩余初始化任务
+     */
+    completeInitializationAsync(i18nResult) {
+        // 使用微任务确保不阻塞主线程
+        Promise.resolve().then(async () => {
+            // 监听i18n初始化完成事件
+            document.addEventListener('i18nReady', () => {
+                this.initLanguageSelector();
+            }, { once: true });
+
+            // 如果i18n已经初始化完成，直接初始化语言选择器
+            if (i18nResult.status === 'fulfilled') {
+                this.initLanguageSelector();
+            }
+
+            // 监听语言变化事件
+            document.addEventListener('languageChanged', (event) => {
+                const { language } = event.detail;
+                this.handleLanguageChange(language);
+            });
+            
+            // 异步加载页面模块（不阻塞主流程）
+            this.loadPageModulesAsync();
+            
+            // 异步预加载其他页面
+            this.schedulePreloading();
+        });
+    }
+    
+    /**
+     * 异步加载页面模块
+     */
+    async loadPageModulesAsync() {
+        if (!this.state.pagesConfig || !this.state.pagesConfig.pages) return;
+        
+        const currentPage = Router.getCurrentPage();
+        const otherPages = this.state.pagesConfig.pages.filter(p => p.id !== currentPage);
+        
+        // 创建脚本加载函数
+        const loadScript = (page) => {
+            return new Promise((resolve) => {
+                const script = document.createElement('script');
+                script.src = page.file;
+                script.async = true;
+                script.onload = () => resolve(page);
+                script.onerror = () => {
+                    console.warn(`页面模块加载失败: ${page.file}`);
+                    resolve(page);
+                };
+                document.head.appendChild(script);
+            });
+        };
+        
+        // 使用requestIdleCallback在空闲时加载
+        if (otherPages.length > 0) {
+            requestIdleCallback(() => {
+                Promise.allSettled(otherPages.map(loadScript));
+            }, { timeout: 500 });
+        }
+    }
+    
+    /**
+     * 完成加载过程
+     */
+    finishLoading() {
+        // 添加应用加载完成标记
+        document.body.classList.add('app-loaded');
+        
+        // 更新加载状态
+        this.state.isLoading = false;
+    }
+    
+
+    /**
+     * 显示初始化错误
+     */
+    showInitializationError(error) {
+        const mainContent = document.getElementById('main-content');
+        if (mainContent) {
+            mainContent.innerHTML = `
+                <div class="error-container">
+                    <div class="error-icon">⚠️</div>
+                    <h2>应用启动失败</h2>
+                    <p>抱歉，应用在启动过程中遇到了问题。</p>
+                    <details>
+                        <summary>错误详情</summary>
+                        <pre>${error.message}</pre>
+                    </details>
+                    <button onclick="location.reload()" class="retry-button">
+                        重新加载
+                    </button>
+                </div>
+            `;
+        }
+        
+        if (window.UI && UI.showError) {
+            UI.showError('应用初始化失败', error.message);
+        }
+    }
+    
+    // 调度预加载任务
+    schedulePreloading() {
+        if (this._pagesPreloaded) return;
+        
+        requestIdleCallback(() => {
+            Router.preloadAllPages();
+            this._pagesPreloaded = true;
+        }, { timeout: 2000 });
+    }
+
     /**
      * 加载页面配置
      */
@@ -133,6 +606,9 @@ class App {
         const navContent = document.createElement('div');
         navContent.className = 'nav-content';
         
+        // 创建导航项容器
+        const navList = document.createElement('ul');
+        
         // 创建导航项
         this.state.pagesConfig.pages.forEach(page => {
             const navItem = document.createElement('div');
@@ -153,9 +629,10 @@ class App {
                 Router.navigate(page.id);
             });
             
-            navContent.appendChild(navItem);
+            navList.appendChild(navItem);
         });
         
+        navContent.appendChild(navList);
         navElement.appendChild(navContent);
     }
     
@@ -165,18 +642,45 @@ class App {
     async loadPageModules() {
         if (!this.state.pagesConfig || !this.state.pagesConfig.pages) return;
         
-        const loadPromises = this.state.pagesConfig.pages.map(page => {
+        // 优先加载当前页面模块
+        const currentPage = Router.getCurrentPage();
+        const currentPageConfig = this.state.pagesConfig.pages.find(p => p.id === currentPage);
+        const otherPages = this.state.pagesConfig.pages.filter(p => p.id !== currentPage);
+        
+        // 创建脚本加载函数
+        const loadScript = (page) => {
             return new Promise((resolve, reject) => {
                 const script = document.createElement('script');
                 script.src = page.file;
-                script.onload = () => resolve();
-                script.onerror = () => reject(new Error(`加载页面模块失败: ${page.file}`));
-                document.body.appendChild(script);
+                script.async = true; // 异步加载
+                script.onload = () => resolve(page);
+                script.onerror = () => {
+                    console.error(`加载页面模块失败: ${page.file}`);
+                    resolve(page); // 即使失败也继续，不阻塞其他模块
+                };
+                document.head.appendChild(script);
             });
-        });
+        };
         
         try {
-            await Promise.allSettled(loadPromises);
+            // 优先加载当前页面模块
+            if (currentPageConfig) {
+                await loadScript(currentPageConfig);
+            }
+            
+            // 批量并行加载其他页面模块（不阻塞主流程）
+            if (otherPages.length > 0) {
+                // 使用requestIdleCallback在空闲时加载
+                requestIdleCallback(() => {
+                    Promise.allSettled(otherPages.map(loadScript))
+                        .then(results => {
+                            const failed = results.filter(r => r.status === 'rejected');
+                            if (failed.length > 0) {
+                                console.warn('部分页面模块加载失败:', failed);
+                            }
+                        });
+                }, { timeout: 1000 });
+            }
         } catch (error) {
             console.error('加载页面模块出错:', error);
         }
@@ -212,36 +716,17 @@ class App {
             append: false,        // 是否追加内容
             animate: true,        // 是否使用动画
             processEvents: true,  // 是否处理事件绑定
-            clearFirst: !options.append // 如果不是追加模式，默认先清空容器
+            clearFirst: !options.append, // 如果不是追加模式，默认先清空容器
+            cache: true          // 是否缓存渲染结果
         };
 
         const renderOptions = { ...defaultOptions, ...options };
 
-        // 处理模板中的数据绑定 (简单的模板引擎)
-        let processedTemplate = template;
-        if (data && typeof template === 'string') {
-            // 替换 ${key} 形式的变量
-            processedTemplate = template.replace(/\${([^}]+)}/g, (match, key) => {
-                // 支持简单的表达式计算
-                try {
-                    // 创建一个带有数据对象属性的上下文
-                    const context = Object.assign({}, data, {
-                        I18n: window.I18n || { translate: (key, fallback) => fallback }
-                    });
-
-                    // 使用Function构造函数创建一个可以访问上下文的函数
-                    const keys = Object.keys(context);
-                    const values = Object.values(context);
-                    const func = new Function(...keys, `return ${key};`);
-
-                    // 执行函数获取结果
-                    return func(...values) ?? '';
-                } catch (error) {
-                    console.warn(`模板表达式解析错误: ${key}`, error);
-                    return '';
-                }
-            });
-        }
+        // 使用内部高性能渲染引擎
+        const processedTemplate = this.renderTemplateInternal(template, data, {
+            cache: renderOptions.cache,
+            forceRender: options.forceRender
+        });
 
         // 清空容器或准备追加
         if (renderOptions.clearFirst) {
@@ -407,6 +892,188 @@ class App {
     OpenUrl(url) {
         Core.execCommand(`am start -a android.intent.action.VIEW -d "${url}"`);
     }
+    
+    /**
+     * 初始化语言选择器
+     * 集成语言选择器的渲染和事件处理逻辑
+     */
+    initLanguageSelector() {
+        const languageButton = document.getElementById('language-button');
+        const languageSelector = document.getElementById('language-selector');
+        
+        if (!languageButton || !languageSelector) {
+            console.warn('语言选择器元素未找到');
+            return;
+        }
+
+        // 设置语言按钮点击事件
+        languageButton.addEventListener('click', () => {
+            this.showLanguageSelector();
+        });
+
+        // 添加点击遮罩关闭功能
+        languageSelector.addEventListener('click', (event) => {
+            if (event.target === languageSelector) {
+                this.hideLanguageSelector();
+            }
+        });
+
+        // 设置取消按钮点击事件
+        const cancelButton = document.getElementById('cancel-language');
+        if (cancelButton) {
+            cancelButton.addEventListener('click', () => {
+                this.hideLanguageSelector();
+            });
+        }
+
+        // 初始化语言选项
+        this.updateLanguageOptions();
+        
+        // 监听语言变化事件
+        document.addEventListener('languageChanged', () => {
+            this.updateLanguageOptions();
+        });
+    }
+
+    // 处理语言变化
+    handleLanguageChange(language) {
+        // 清理渲染缓存确保新语言立即生效
+        this.clearRenderCache();
+        
+        // 更新页面标题
+        if (window.UI && typeof window.UI.updatePageTitle === 'function') {
+            window.UI.updatePageTitle();
+        }
+        
+        // 重新渲染系统按钮以更新标题和提示文本
+        this.initSystemButtons();
+        
+        // 更新语言选择器选项
+        this.updateLanguageOptions();
+        
+        // 更新导航栏标签
+        this.updateNavigationLabels();
+        
+        // 强制重新应用翻译到所有元素
+        if (window.I18n && typeof window.I18n.applyTranslations === 'function') {
+            window.I18n.applyTranslations();
+        }
+        
+        console.log(`UI已更新为语言: ${language}`);
+    }
+    
+    /**
+     * 显示语言选择器
+     */
+    showLanguageSelector() {
+        const languageSelector = document.getElementById('language-selector');
+        if (languageSelector) {
+            UI.showOverlay(languageSelector);
+        }
+    }
+    
+    /**
+     * 隐藏语言选择器
+     */
+    hideLanguageSelector() {
+        const languageSelector = document.getElementById('language-selector');
+        if (!languageSelector || languageSelector.classList.contains('closing')) return;
+
+        languageSelector.classList.add('closing');
+
+        setTimeout(() => {
+            languageSelector.classList.remove('active', 'closing');
+        }, 200);
+    }
+    
+    /**
+     * 更新语言选项
+     */
+    updateLanguageOptions() {
+        const languageOptions = document.getElementById('language-options');
+        if (!languageOptions || !window.I18n) return;
+
+        const fragment = document.createDocumentFragment();
+
+        I18n.supportedLangs.forEach(lang => {
+            const option = document.createElement('div');
+            option.className = `language-option ${lang === I18n.currentLang ? 'selected' : ''}`;
+            option.setAttribute('data-lang', lang);
+
+            const radioInput = document.createElement('input');
+            radioInput.type = 'radio';
+            radioInput.name = 'language';
+            radioInput.id = `lang-${lang}`;
+            radioInput.value = lang;
+            radioInput.checked = lang === I18n.currentLang;
+            radioInput.className = 'radio';
+
+            const label = document.createElement('label');
+            label.htmlFor = `lang-${lang}`;
+            label.textContent = this.getLanguageDisplayName(lang);
+
+            option.appendChild(radioInput);
+            option.appendChild(label);
+
+            option.addEventListener('click', async () => {
+                if (lang === I18n.currentLang) {
+                    this.hideLanguageSelector();
+                    return;
+                }
+
+                this.hideLanguageSelector();
+                
+                // 显示切换提示
+                if (window.Core && typeof window.Core.showToast === 'function') {
+                    window.Core.showToast(I18n.translate('SWITCHING_LANGUAGE', '正在切换语言...'));
+                }
+                
+                if (lang !== I18n.currentLang) {
+                    const success = await I18n.setLanguage(lang);
+                    if (success && window.Core && typeof window.Core.showToast === 'function') {
+                        // 使用新语言显示成功提示
+                        setTimeout(() => {
+                            window.Core.showToast(I18n.translate('LANGUAGE_SWITCHED', '语言切换成功'));
+                        }, 100);
+                    }
+                }
+            });
+
+            fragment.appendChild(option);
+        });
+        
+        languageOptions.innerHTML = '';
+        languageOptions.appendChild(fragment);
+    }
+    
+    /**
+     * 更新导航栏标签
+     */
+    updateNavigationLabels() {
+        const navItems = document.querySelectorAll('.nav-item');
+        navItems.forEach(navItem => {
+            const label = navItem.querySelector('.nav-label');
+            if (label && label.hasAttribute('data-i18n')) {
+                const i18nKey = label.getAttribute('data-i18n');
+                const translation = I18n.translate(i18nKey);
+                if (translation) {
+                    label.textContent = translation;
+                }
+            }
+        });
+    }
+    
+    /**
+     * 获取语言显示名称
+     */
+    getLanguageDisplayName(lang) {
+        const displayNames = {
+            'zh': '中文',
+            'en': 'English', 
+            'ru': 'Русский'
+        };
+        return displayNames[lang] || lang.toUpperCase();
+    }
 }
 class PreloadManager {
     static dataCache = new Map();
@@ -465,8 +1132,14 @@ class Router {
     // 页面模块映射
     static modules = {};
 
-    // 页面缓存
-    static cache = new Map();
+    // 页面模块缓存
+    static pageCache = {};
+    
+    // 加载中的Promise缓存
+    static loadingPromises = {};
+    
+    // 数据缓存
+    static dataCache = new Map();
     
     /**
      * 初始化模块映射
@@ -501,7 +1174,7 @@ class Router {
      * @param {string} pageName - 页面名称
      */
     static async preloadPage(pageName) {
-        if (this.cache.has(pageName)) return;
+        if (this.pageCache[pageName]) return;
 
         const pageModule = window[this.modules[pageName]];
         if (!pageModule) return;
@@ -514,7 +1187,7 @@ class Router {
             tasks.push((async () => {
                 try {
                     await pageModule.init();
-                    this.cache.set(pageName, pageModule);
+                    this.pageCache[pageName] = pageModule;
                 } finally {
                     delete pageModule._initializing;
                 }
@@ -529,7 +1202,7 @@ class Router {
         await Promise.allSettled(tasks);
     }
 
-    static preloadPages() {
+    static preloadAllPages() {
         if (!app.state.pagesConfig || !app.state.pagesConfig.pages) return;
         
         const { batchSize, timeout } = this.preloadConfig;
@@ -569,163 +1242,788 @@ class Router {
         try {
             if (app.state.currentPage === pageName && !isInitialLoad) return;
 
-            // 获取当前UI元素
-            const headerTitle = document.querySelector('.header-title');
-            const pageActions = document.querySelector('.page-actions');
-            const oldContainer = document.querySelector('.page-container');
 
-            // 创建新容器
-            const newContainer = document.createElement('div');
-            newContainer.className = 'page-container';
-            newContainer.style.opacity = '0';
 
-            // 添加淡出动画，但不等待它完成
-            if (headerTitle) {
-                headerTitle.classList.remove('fade-in');
-                headerTitle.classList.add('fade-out');
-            }
-            if (pageActions) {
-                pageActions.classList.remove('fade-in');
-                pageActions.classList.add('fade-out');
-            }
+            // 并行执行多个操作以提升性能
+            const [elements, pageModule] = await Promise.all([
+                Promise.resolve(this.getNavigationElements()),
+                this.loadPageModuleOptimized(pageName)
+            ]);
+            
+            // 处理旧页面的deactivate（非阻塞）
+            this.deactivateCurrentPage().catch(error => 
+                console.warn('页面停用失败:', error)
+            );
 
-            // 立即更新UI状态，不阻塞
+            // 立即更新应用状态和导航，确保UI同步
+            app.state.currentPage = pageName;
             UI.updateNavigation(pageName);
-            UI.updatePageTitle(pageName);
-
-            // 处理旧页面的deactivate
-            if (app.state.currentPage) {
-                const currentPageModule = this.cache.get(app.state.currentPage) ||
-                    window[this.modules[app.state.currentPage]];
-                if (currentPageModule?.onDeactivate) {
-                    currentPageModule.onDeactivate();
-                }
-            }
-
-            // 加载新页面模块
-            let pageModule;
-            if (this.cache.has(pageName) && this.cache.get(pageName)) {
-                pageModule = this.cache.get(pageName);
-            } else {
-                pageModule = window[this.modules[pageName]];
-                if (!pageModule) throw new Error(`页面模块 ${pageName} 未找到`);
-
-                // 添加初始化锁定
-                if (!pageModule._initializing && typeof pageModule.init === 'function') {
-                    pageModule._initializing = true;
-                    try {
-                        const initResult = await pageModule.init();
-                        if (initResult === false) {
-                            throw new Error(`页面 ${pageName} 初始化失败`);
-                        }
-                        this.cache.set(pageName, pageModule);
-                    } finally {
-                        delete pageModule._initializing;
-                    }
-                }
-            }
-
-            // 渲染页面内容
-            newContainer.innerHTML = pageModule.render();
-
-            // 直接移除旧容器
-            if (oldContainer) {
-                oldContainer.remove();
-            }
-
-            // 添加新容器
-            document.getElementById('main-content').appendChild(newContainer);
-
-            // 执行渲染后回调
-            if (pageModule.afterRender) {
-                await pageModule.afterRender();
-            }
-
-            // 显示新容器并添加滑入动画
-            newContainer.style.opacity = '';
-            requestAnimationFrame(() => {
-                newContainer.classList.add('slide-in');
-            });
-
-            // 执行激活方法
-            if (pageModule.onActivate) {
-                await pageModule.onActivate();
-            }
-
-            // 更新页面操作按钮
-            UI.updatePageActions(pageName);
-
-            // 获取新的UI元素并添加淡入动画
-            const newHeaderTitle = document.querySelector('.header-title');
-            const newPageActions = document.querySelector('.page-actions');
-
-            // 使用 requestAnimationFrame 确保在下一帧添加动画
-            requestAnimationFrame(() => {
-                if (newHeaderTitle) {
-                    newHeaderTitle.classList.remove('fade-out');
-                    newHeaderTitle.classList.add('fade-in');
-                }
-                if (newPageActions) {
-                    newPageActions.classList.remove('fade-out');
-                    newPageActions.classList.add('fade-in');
-                }
-                // 显示新容器
-                newContainer.style.opacity = '';
-                requestAnimationFrame(() => {
-                    newContainer.classList.add('slide-in');
-                });
-            });
-
+            
             // 更新历史记录
             if (updateHistory) {
                 window.history.pushState(null, '', `#${pageName}`);
             }
 
-            app.state.currentPage = pageName;
+            // 使用高性能内部渲染引擎渲染页面内容
+            const newContainer = await this.createPageContainerOptimized(pageModule, pageName);
+
+            // 执行页面过渡
+            await this.performPageTransition(newContainer, elements.oldContainer, pageName);
+
+            // 执行渲染后回调和激活
+            await this.activateNewPage(pageModule, pageName);
+
+            // 预加载相邻页面
+            this.preloadAdjacentPages(pageName);
 
         } catch (error) {
             console.error('页面导航错误:', error);
             UI.showError('页面加载失败', error.message);
         }
     }
-
-    // 页面过渡效果
-    static async performPageTransition(newContainer, oldContainer, newPageName) {
-        // 如果没有旧容器，直接显示新容器
-        if (!oldContainer) {
-            requestAnimationFrame(() => {
-                newContainer.classList.add('slide-in');
-            });
-            return;
+    
+    /**
+     * 批量获取导航相关的DOM元素
+     */
+    static getNavigationElements() {
+        return {
+            headerTitle: document.querySelector('.header-title'),
+            pageActions: document.querySelector('.page-actions'),
+            oldContainer: document.querySelector('.page-container'),
+            mainContent: document.getElementById('main-content')
+        };
+    }
+    
+    /**
+     * 停用当前页面
+     */
+    static async deactivateCurrentPage() {
+        if (!app.state.currentPage) return;
+        
+        const currentPageModule = this.pageCache[app.state.currentPage] ||
+            window[this.modules[app.state.currentPage]];
+        
+        if (currentPageModule?.onDeactivate) {
+            try {
+                await currentPageModule.onDeactivate();
+            } catch (error) {
+                console.warn('页面停用失败:', error);
+            }
+        }
+    }
+    
+    /**
+     * 加载页面模块
+     */
+    static async loadPageModule(pageName) {
+        // 检查缓存
+        if (this.pageCache[pageName]) {
+            return this.pageCache[pageName];
+        }
+        
+        const pageModule = window[this.modules[pageName]];
+        if (!pageModule) {
+            throw new Error(`页面模块 ${pageName} 未找到`);
         }
 
-        // 设置容器样式
-        const mainContent = UI.elements.mainContent;
-        mainContent.style.position = 'relative';
-        mainContent.style.overflow = 'hidden';
+        // 初始化模块（如果需要）
+        if (!pageModule._initialized && typeof pageModule.init === 'function') {
+            pageModule._initializing = true;
+            try {
+                const initResult = await pageModule.init();
+                if (initResult === false) {
+                    throw new Error(`页面 ${pageName} 初始化失败`);
+                }
+                pageModule._initialized = true;
+                this.pageCache[pageName] = pageModule;
+            } finally {
+                delete pageModule._initializing;
+            }
+        }
+        
+        return pageModule;
+    }
 
+    /**
+      * 优化的页面模块加载
+      * @param {string} pageName - 页面名称
+      * @returns {Promise<Object>} 页面模块
+      */
+     static async loadPageModuleOptimized(pageName) {
+         // 检查缓存
+         if (this.pageCache[pageName]) {
+             return this.pageCache[pageName];
+         }
+
+         // 检查是否正在加载中
+         if (this.loadingPromises && this.loadingPromises[pageName]) {
+             return await this.loadingPromises[pageName];
+         }
+
+         // 创建加载Promise
+         if (!this.loadingPromises) {
+             this.loadingPromises = {};
+         }
+
+         this.loadingPromises[pageName] = this.loadPageModuleInternal(pageName);
+         
+         try {
+             const pageModule = await this.loadingPromises[pageName];
+             delete this.loadingPromises[pageName];
+             return pageModule;
+         } catch (error) {
+             delete this.loadingPromises[pageName];
+             throw error;
+         }
+     }
+
+    /**
+      * 内部页面模块加载方法
+      * @param {string} pageName - 页面名称
+      * @returns {Promise<Object>} 页面模块
+      */
+     static async loadPageModuleInternal(pageName) {
+         // 动态导入页面模块
+         await import(`./pages/${pageName}.js`);
+         
+         // 获取页面模块（从window对象）
+         const moduleKey = this.modules[pageName];
+         const pageModule = window[moduleKey];
+         
+         if (!pageModule) {
+             throw new Error(`页面模块 ${moduleKey} 未找到`);
+         }
+         
+         // 并行执行初始化和数据预加载
+         const initPromises = [];
+         
+         if (pageModule.init && !pageModule._initialized) {
+             pageModule._initializing = true;
+             initPromises.push(pageModule.init().then(result => {
+                 if (result === false) {
+                     throw new Error(`页面 ${pageName} 初始化失败`);
+                 }
+                 pageModule._initialized = true;
+                 delete pageModule._initializing;
+             }));
+         }
+         
+         // 预加载页面数据
+         if (pageModule.preloadData) {
+             initPromises.push(pageModule.preloadData().catch(error => {
+                 console.warn(`页面 ${pageName} 数据预加载失败:`, error);
+             }));
+         }
+         
+         await Promise.all(initPromises);
+
+         // 缓存页面模块
+         this.pageCache[pageName] = pageModule;
+         return pageModule;
+     }
+    
+    /**
+     * 创建页面容器
+     */
+    static createPageContainer(pageModule) {
+        const newContainer = document.createElement('div');
+        newContainer.className = 'page-container';
+        newContainer.innerHTML = pageModule.render();
+        return newContainer;
+    }
+
+    /**
+     * 优化的页面容器创建
+     * @param {Object} pageModule - 页面模块
+     * @param {string} pageName - 页面名称
+     * @returns {Promise<HTMLElement>} 页面容器
+     */
+    static async createPageContainerOptimized(pageModule, pageName) {
+        const newContainer = document.createElement('div');
+        newContainer.className = 'page-container';
+        
+        // 使用高性能内部渲染
+        if (pageModule.renderAsync) {
+            try {
+                const content = await pageModule.renderAsync();
+                newContainer.innerHTML = content;
+            } catch (error) {
+                console.warn('异步渲染失败，回退到同步渲染:', error);
+                newContainer.innerHTML = pageModule.render();
+            }
+        } else {
+            newContainer.innerHTML = pageModule.render();
+        }
+        
+        return newContainer;
+    }
+    
+    /**
+     * 激活新页面
+     */
+    static async activateNewPage(pageModule, pageName) {
+        // 执行渲染后回调
+        if (pageModule.afterRender) {
+            try {
+                await pageModule.afterRender();
+            } catch (error) {
+                console.warn('页面渲染后回调失败:', error);
+            }
+        }
+
+        // 执行激活方法
+        if (pageModule.onActivate) {
+            try {
+                await pageModule.onActivate();
+            } catch (error) {
+                console.warn('页面激活失败:', error);
+            }
+        }
+
+        // 批量更新UI
+        this.updateUIForNewPage(pageName);
+    }
+    
+    /**
+     * 批量更新UI状态 - 优化为并行非阻塞处理
+     */
+    static updateUIForNewPage(pageName) {
+        // 导航状态已在navigate方法中提前更新，这里只更新其他UI元素
+        // 使用并行处理，避免阻塞页面切换
+        requestAnimationFrame(() => {
+            // 并行更新标题和操作按钮，不等待完成
+            Promise.allSettled([
+                Promise.resolve(UI.updatePageTitle(pageName)),
+                Promise.resolve(UI.updatePageActions(pageName))
+            ]).catch(error => {
+                console.warn('UI更新失败:', error);
+            });
+        });
+    }
+
+    // 页面过渡效果 - 优化为非阻塞并行处理
+    static async performPageTransition(newContainer, oldContainer, newPageName) {
+        const mainContent = document.getElementById('main-content');
+        if (!mainContent) return;
+        
+        // 直接移除旧容器，简化过渡逻辑
+        if (oldContainer) {
+            oldContainer.remove();
+        }
+
+        // 添加新容器
+        mainContent.appendChild(newContainer);
+
+        // 使用CSS动画优化过渡效果，匹配新的动画时长
         return new Promise(resolve => {
-            mainContent.appendChild(newContainer);
-
-            // 在下一帧开始新容器动画
             requestAnimationFrame(() => {
                 newContainer.classList.add('slide-in');
+                // 匹配新的150ms动画时长
+                setTimeout(resolve, 150);
             });
-
-            // 监听新容器动画完成
-            newContainer.addEventListener('animationend', () => {
-                // 移除旧容器
-                oldContainer.remove();
-                // 清理样式
-                mainContent.style.position = '';
-                mainContent.style.overflow = '';
-                resolve();
-            }, { once: true });
         });
+    }
+
+
+
+    /**
+     * 预加载相邻页面
+     * @param {string} currentPageName - 当前页面名称
+     */
+    static preloadAdjacentPages(currentPageName) {
+        if (!app.state.pagesConfig || !app.state.pagesConfig.pages) return;
+        
+        const pages = app.state.pagesConfig.pages;
+        const currentIndex = pages.findIndex(page => page.id === currentPageName);
+        
+        if (currentIndex === -1) return;
+        
+        // 预加载前后页面
+        const adjacentPages = [];
+        if (currentIndex > 0) {
+            adjacentPages.push(pages[currentIndex - 1].id);
+        }
+        if (currentIndex < pages.length - 1) {
+            adjacentPages.push(pages[currentIndex + 1].id);
+        }
+        
+        // 异步预加载
+        requestIdleCallback(() => {
+            adjacentPages.forEach(pageId => {
+                this.preloadPage(pageId).catch(error => {
+                    console.warn(`预加载页面 ${pageId} 失败:`, error);
+                });
+            });
+        }, { timeout: 1000 });
+     }
+
+     /**
+      * 预加载指定页面
+      * @param {string} pageName - 页面名称
+      * @returns {Promise<void>}
+      */
+     static async preloadPage(pageName) {
+         try {
+             // 检查是否已经缓存
+             if (this.pageCache[pageName]) {
+                 return;
+             }
+
+             // 预加载页面模块
+             await this.loadPageModuleOptimized(pageName);
+             
+             // 使用内部缓存预处理页面模板
+            const pageModule = this.pageCache[pageName];
+            if (pageModule && pageModule.getTemplate) {
+                const template = pageModule.getTemplate();
+                app.templateCache.set(pageName, template);
+            }
+             
+             console.log(`页面 ${pageName} 预加载完成`);
+         } catch (error) {
+             console.warn(`预加载页面 ${pageName} 失败:`, error);
+         }
+     }
+
+     /**
+      * 批量预加载页面
+      * @param {string[]} pageNames - 页面名称数组
+      * @returns {Promise<void>}
+      */
+     static async preloadPages(pageNames) {
+         const preloadPromises = pageNames.map(pageName => 
+             this.preloadPage(pageName).catch(error => {
+                 console.warn(`预加载页面 ${pageName} 失败:`, error);
+             })
+         );
+         
+         await Promise.allSettled(preloadPromises);
+     }
+ }
+
+/**
+ * 布局管理器 - 负责处理横竖屏切换和元素布局
+ */
+class LayoutManager {
+    static state = {
+        currentMode: null, // 'landscape' | 'portrait'
+        isTransitioning: false,
+        elementPositions: new Map(), // 记录元素的原始位置
+        containers: new Map() // 缓存容器引用
+    };
+
+    /**
+     * 初始化布局管理器
+     */
+    static init() {
+        this.cacheContainers();
+        this.bindEvents();
+        // 强制执行初始布局切换，确保初始状态正确
+        this.state.currentMode = null;
+        this.updateLayout();
+    }
+
+    /**
+     * 检测初始模式
+     */
+    static detectInitialMode() {
+        this.state.currentMode = window.innerWidth >= 768 ? 'landscape' : 'portrait';
+    }
+
+    /**
+     * 缓存容器引用
+     */
+    static cacheContainers() {
+        const containers = {
+            // 顶栏容器
+            header: document.querySelector('.app-header'),
+            headerActions: document.querySelector('.header-actions'),
+            systemButtons: document.querySelector('#system-buttons'),
+            
+            // 侧栏容器
+            appNav: document.querySelector('#app-nav'),
+            navContent: null, // 动态获取
+            
+            // 动态容器（会被创建）
+            sidebarPageActions: null,
+            sidebarSystemActions: null
+        };
+        
+        this.state.containers = new Map(Object.entries(containers));
+    }
+
+    /**
+     * 绑定事件监听器
+     */
+    static bindEvents() {
+        let resizeTimeout;
+        
+        // 窗口大小变化事件（防抖）
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                this.handleResize();
+            }, 100);
+        });
+        
+        // 屏幕方向变化事件
+        window.addEventListener('orientationchange', () => {
+            setTimeout(() => {
+                this.handleOrientationChange();
+            }, 300);
+        });
+    }
+
+    /**
+     * 处理窗口大小变化
+     */
+    static handleResize() {
+        const newMode = window.innerWidth >= 768 ? 'landscape' : 'portrait';
+        
+        if (newMode !== this.state.currentMode) {
+            this.switchMode(newMode);
+        }
+    }
+
+    /**
+     * 处理屏幕方向变化
+     */
+    static handleOrientationChange() {
+        // 重新缓存容器（可能DOM结构发生变化）
+        this.cacheContainers();
+        this.handleResize();
+    }
+
+    /**
+     * 切换布局模式
+     */
+    static switchMode(newMode) {
+        if (this.state.isTransitioning) return;
+        
+        this.state.isTransitioning = true;
+        const oldMode = this.state.currentMode;
+        
+        console.log(`布局切换: ${oldMode} -> ${newMode}`);
+        
+        // 执行切换逻辑
+        if (newMode === 'landscape') {
+            this.switchToLandscape();
+        } else {
+            this.switchToPortrait();
+        }
+        
+        this.state.currentMode = newMode;
+        this.state.isTransitioning = false;
+        
+        // 触发布局变化事件
+        this.dispatchLayoutChangeEvent(oldMode, newMode);
+    }
+
+    /**
+     * 切换到横屏模式
+     */
+    static switchToLandscape() {
+        console.log('切换到横屏模式');
+        
+        // 1. 确保侧栏容器存在
+        this.ensureSidebarContainers();
+        
+        // 2. 移动页面操作按钮到侧栏
+        this.movePageActionsToSidebar();
+        
+        // 3. 移动系统按钮到侧栏
+        this.moveSystemButtonsToSidebar();
+        
+        // 4. 更新容器状态
+        this.updateContainerStates('landscape');
+    }
+
+    /**
+     * 切换到竖屏模式
+     */
+    static switchToPortrait() {
+        console.log('切换到竖屏模式');
+        
+        // 1. 移动页面操作按钮回顶栏
+        this.movePageActionsToHeader();
+        
+        // 2. 移动系统按钮回顶栏
+        this.moveSystemButtonsToHeader();
+        
+        // 3. 清理侧栏容器
+        this.cleanupSidebarContainers();
+        
+        // 4. 更新容器状态
+        this.updateContainerStates('portrait');
+    }
+
+    /**
+     * 确保侧栏容器存在
+     */
+    static ensureSidebarContainers() {
+        const appNav = this.state.containers.get('appNav');
+        if (!appNav) return;
+        
+        let navContent = appNav.querySelector('.nav-content');
+        if (!navContent) {
+            console.warn('nav-content 容器不存在');
+            return;
+        }
+        
+        this.state.containers.set('navContent', navContent);
+        
+        // 创建或获取页面操作容器
+        let pageActionsContainer = navContent.querySelector('.page-actions');
+        if (!pageActionsContainer) {
+            pageActionsContainer = this.createSidebarContainer('page-actions');
+            this.insertContainerInSidebar(pageActionsContainer, 'page-actions');
+        }
+        this.state.containers.set('sidebarPageActions', pageActionsContainer);
+        
+        // 创建或获取系统按钮容器
+        let systemActionsContainer = navContent.querySelector('.system-actions');
+        if (!systemActionsContainer) {
+            systemActionsContainer = this.createSidebarContainer('system-actions');
+            this.insertContainerInSidebar(systemActionsContainer, 'system-actions');
+        }
+        this.state.containers.set('sidebarSystemActions', systemActionsContainer);
+    }
+
+    /**
+     * 创建侧栏容器
+     */
+    static createSidebarContainer(type) {
+        const container = document.createElement('div');
+        container.className = type;
+        container.setAttribute('data-layout-container', type);
+        return container;
+    }
+
+    /**
+     * 在侧栏中插入容器
+     */
+    static insertContainerInSidebar(container, type) {
+        const navContent = this.state.containers.get('navContent');
+        if (!navContent) return;
+        
+        if (type === 'page-actions') {
+            // 页面操作容器插入到导航列表之后
+            const navList = navContent.querySelector('ul');
+            if (navList) {
+                navList.insertAdjacentElement('afterend', container);
+            } else {
+                navContent.appendChild(container);
+            }
+        } else if (type === 'system-actions') {
+            // 系统按钮容器插入到最后
+            navContent.appendChild(container);
+        }
+    }
+
+    /**
+     * 移动页面操作按钮到侧栏
+     */
+    static movePageActionsToSidebar() {
+        const pageActions = document.getElementById('page-actions');
+        const sidebarContainer = this.state.containers.get('sidebarPageActions');
+        
+        if (pageActions && sidebarContainer) {
+            this.moveElement(pageActions, sidebarContainer, 'clear');
+        }
+    }
+
+    /**
+     * 移动系统按钮到侧栏
+     */
+    static moveSystemButtonsToSidebar() {
+        const systemContainer = this.state.containers.get('sidebarSystemActions');
+        if (!systemContainer) return;
+        
+        const buttons = [
+            document.getElementById('language-button'),
+            document.getElementById('theme-toggle')
+        ];
+        
+        buttons.forEach(button => {
+            if (button) {
+                this.moveElement(button, systemContainer);
+            }
+        });
+    }
+
+    /**
+     * 移动页面操作按钮回顶栏
+     */
+    static movePageActionsToHeader() {
+        const pageActions = document.getElementById('page-actions');
+        const headerActions = this.state.containers.get('headerActions');
+        const systemButtons = this.state.containers.get('systemButtons');
+        
+        if (pageActions && headerActions) {
+            // 插入到系统按钮之前
+            const insertBefore = systemButtons || headerActions.firstChild;
+            this.moveElement(pageActions, headerActions, 'insertBefore', insertBefore);
+        }
+    }
+
+    /**
+     * 移动系统按钮回顶栏
+     */
+    static moveSystemButtonsToHeader() {
+        const systemButtons = this.state.containers.get('systemButtons');
+        if (!systemButtons) return;
+        
+        const buttons = [
+            document.getElementById('language-button'),
+            document.getElementById('theme-toggle')
+        ];
+        
+        buttons.forEach(button => {
+            if (button) {
+                this.moveElement(button, systemButtons);
+            }
+        });
+    }
+
+    /**
+     * 移动元素到指定容器
+     */
+    static moveElement(element, targetContainer, mode = 'append', insertBefore = null) {
+        if (!element || !targetContainer) return;
+        
+        // 记录原始位置（如果还没记录）
+        if (!this.state.elementPositions.has(element.id)) {
+            this.state.elementPositions.set(element.id, {
+                parent: element.parentNode,
+                nextSibling: element.nextSibling
+            });
+        }
+        
+        // 从当前位置移除
+        if (element.parentNode && element.parentNode !== targetContainer) {
+            element.parentNode.removeChild(element);
+        }
+        
+        // 添加到目标容器
+        if (!targetContainer.contains(element)) {
+            switch (mode) {
+                case 'clear':
+                    targetContainer.innerHTML = '';
+                    targetContainer.appendChild(element);
+                    break;
+                case 'insertBefore':
+                    if (insertBefore) {
+                        targetContainer.insertBefore(element, insertBefore);
+                    } else {
+                        targetContainer.appendChild(element);
+                    }
+                    break;
+                default:
+                    targetContainer.appendChild(element);
+            }
+        }
+    }
+
+    /**
+     * 清理侧栏容器
+     */
+    static cleanupSidebarContainers() {
+        const containers = ['sidebarPageActions', 'sidebarSystemActions'];
+        
+        containers.forEach(containerKey => {
+            const container = this.state.containers.get(containerKey);
+            if (container && container.parentNode) {
+                // 不删除容器，只清空内容，保持DOM结构稳定
+                container.innerHTML = '';
+            }
+        });
+    }
+
+    /**
+     * 更新容器状态
+     */
+    static updateContainerStates(mode) {
+        document.body.setAttribute('data-layout-mode', mode);
+        
+        // 触发CSS重新计算
+        requestAnimationFrame(() => {
+            document.body.classList.add('layout-updated');
+            setTimeout(() => {
+                document.body.classList.remove('layout-updated');
+            }, 300);
+        });
+    }
+
+    /**
+     * 触发布局变化事件
+     */
+    static dispatchLayoutChangeEvent(oldMode, newMode) {
+        const event = new CustomEvent('layoutModeChanged', {
+            detail: { oldMode, newMode, timestamp: Date.now() }
+        });
+        document.dispatchEvent(event);
+    }
+
+    /**
+     * 强制更新布局
+     */
+    static updateLayout() {
+        this.cacheContainers();
+        const currentMode = window.innerWidth >= 768 ? 'landscape' : 'portrait';
+        
+        if (currentMode !== this.state.currentMode || this.state.currentMode === null) {
+            this.switchMode(currentMode);
+        }
+    }
+
+    /**
+     * 获取当前布局模式
+     */
+    static getCurrentMode() {
+        return this.state.currentMode;
+    }
+
+    /**
+     * 检查是否为横屏模式
+     */
+    static isLandscape() {
+        return this.state.currentMode === 'landscape';
+    }
+
+    /**
+     * 检查是否为竖屏模式
+     */
+    static isPortrait() {
+        return this.state.currentMode === 'portrait';
+    }
+
+    /**
+     * 重置布局管理器
+     */
+    static reset() {
+        this.state.currentMode = null;
+        this.state.isTransitioning = false;
+        this.state.elementPositions.clear();
+        this.state.containers.clear();
+        
+        this.init();
+    }
+
+    /**
+     * 获取调试信息
+     */
+    static getDebugInfo() {
+        return {
+            currentMode: this.state.currentMode,
+            isTransitioning: this.state.isTransitioning,
+            elementPositions: Array.from(this.state.elementPositions.entries()),
+            containers: Array.from(this.state.containers.keys()),
+            windowWidth: window.innerWidth
+        };
     }
 }
 
-// UI管理器
+// UI管理类
 class UI {
     // UI元素引用
     static elements = {
@@ -741,7 +2039,16 @@ class UI {
         appNav: document.getElementById('app-nav')
     };
 
-    // 更新页面标题
+    // 更新UI元素引用
+    static updateElementReferences() {
+        this.elements.themeToggle = document.getElementById('theme-toggle');
+        this.elements.languageButton = document.getElementById('language-button');
+        this.elements.pageActions = document.getElementById('page-actions');
+        this.elements.pageTitle = document.getElementById('page-title');
+        this.elements.navContent = document.querySelector('.nav-content');
+    }
+
+    // 更新页面标题 - 添加非阻塞淡入淡出动画
     static updatePageTitle(pageName) {
         if (!app.state.pagesConfig || !app.state.pagesConfig.pages) return;
         
@@ -753,7 +2060,39 @@ class UI {
             ? I18n.translate(pageConfig.i18n_key, pageConfig.name)
             : pageConfig.name;
 
-        this.elements.pageTitle.textContent = title || 'AMMF WebUI';
+        // 检查pageTitle元素是否存在，避免TypeError
+        if (this.elements.pageTitle) {
+            const titleElement = this.elements.pageTitle;
+            const headerTitleElement = document.querySelector('.header-title');
+            
+            // 使用requestAnimationFrame确保非阻塞处理
+            requestAnimationFrame(() => {
+                // 如果标题有内容且不同，先添加淡出动画
+                if (titleElement.textContent && titleElement.textContent !== title) {
+                    // 对header-title容器应用动画
+                    if (headerTitleElement) {
+                        headerTitleElement.classList.add('fade-out');
+                    }
+                    
+                    // 等待淡出动画完成后更新标题
+                    setTimeout(() => {
+                        titleElement.textContent = title || 'AMMF WebUI';
+                        if (headerTitleElement) {
+                            headerTitleElement.classList.remove('fade-out');
+                            headerTitleElement.classList.add('fade-in');
+                            
+                            // 动画完成后清理动画类
+                            setTimeout(() => {
+                                headerTitleElement.classList.remove('fade-in');
+                            }, 150); // 匹配fade-in动画时长
+                        }
+                    }, 120); // 匹配fade-out动画时长
+                } else {
+                    // 如果没有现有标题或标题相同，直接设置
+                    titleElement.textContent = title || 'AMMF WebUI';
+                }
+            });
+        }
     }
     
     static pageActions = new Map();
@@ -783,13 +2122,33 @@ class UI {
     }
 
     /**
-     * 更新页面操作按钮
+     * 更新页面操作按钮 - 添加淡入淡出动画
      * @param {string} pageName - 页面名称
      */
     static updatePageActions(pageName) {
         const actionsContainer = this.elements.pageActions;
         if (!actionsContainer) return;
 
+        // 先添加淡出动画
+        if (actionsContainer.children.length > 0) {
+            actionsContainer.classList.add('fade-out');
+            
+            // 等待淡出动画完成后更新内容
+            setTimeout(() => {
+                this.updatePageActionsContent(pageName, actionsContainer);
+            }, 120); // 匹配fade-out动画时长
+        } else {
+            // 如果没有现有内容，直接更新
+            this.updatePageActionsContent(pageName, actionsContainer);
+        }
+    }
+
+    /**
+     * 更新页面操作按钮内容
+     * @param {string} pageName - 页面名称
+     * @param {HTMLElement} actionsContainer - 操作按钮容器
+     */
+    static updatePageActionsContent(pageName, actionsContainer) {
         // 清理之前的事件监听器
         this.activeActions.forEach(id => {
             const button = document.getElementById(id);
@@ -807,6 +2166,16 @@ class UI {
                 <span class="material-symbols-rounded">${action.icon}</span>
             </button>
         `).join('');
+
+        // 移除淡出类并添加淡入动画
+        actionsContainer.classList.remove('fade-out');
+        if (actions.length > 0) {
+            actionsContainer.classList.add('fade-in');
+            // 动画完成后清理动画类
+            setTimeout(() => {
+                actionsContainer.classList.remove('fade-in');
+            }, 150); // 匹配fade-in动画时长
+        }
 
         // 绑定事件
         actions.forEach(action => {
@@ -901,87 +2270,47 @@ class UI {
         `;
     }
 
-    // 更新导航状态
+    // 更新导航状态 - 优化为非阻塞并行动画
     static updateNavigation(pageName) {
-        const navItems = document.querySelectorAll('.nav-item');
-        navItems.forEach(item => {
-            // 移除之前的动画类
-            item.classList.remove('nav-entering', 'nav-exiting');
+        // 缓存导航项查询结果
+        if (!this._cachedNavItems) {
+            this._cachedNavItems = document.querySelectorAll('.nav-item');
+        }
+        
+        // 使用requestAnimationFrame确保动画并行处理，不阻塞页面切换
+        requestAnimationFrame(() => {
+            this._cachedNavItems.forEach(item => {
+                // 移除之前的动画类
+                item.classList.remove('nav-entering', 'nav-exiting');
 
-            if (item.dataset.page === pageName) {
-                // 如果之前未激活,添加进入动画
-                if (!item.classList.contains('active')) {
-                    item.classList.add('nav-entering');
+                if (item.dataset.page === pageName) {
+                    // 如果之前未激活,添加进入动画
+                    if (!item.classList.contains('active')) {
+                        item.classList.add('nav-entering');
+                        // 动画完成后清理动画类
+                        setTimeout(() => item.classList.remove('nav-entering'), 120);
+                    }
+                    item.classList.add('active');
+                } else {
+                    // 如果之前已激活,添加退出动画
+                    if (item.classList.contains('active')) {
+                        item.classList.add('nav-exiting');
+                        // 动画完成后清理动画类
+                        setTimeout(() => item.classList.remove('nav-exiting'), 100);
+                    }
+                    item.classList.remove('active');
                 }
-                item.classList.add('active');
-            } else {
-                // 如果之前已激活,添加退出动画
-                if (item.classList.contains('active')) {
-                    item.classList.add('nav-exiting');
-                }
-                item.classList.remove('active');
-            }
+            });
         });
     }
 
+    // 清理缓存的DOM引用
+    static clearDOMCache() {
+        this._cachedNavItems = null;
+    }
+
     static updateLayout() {
-        const isLandscape = window.innerWidth >= 768;
-        const header = this.elements.header;
-        const pageActions = this.elements.pageActions;
-        const themeToggle = this.elements.themeToggle;
-        const languageButton = this.elements.languageButton;
-        const appNav = this.elements.appNav;
-
-        if (isLandscape) {
-            // 横屏模式：移动按钮到侧栏
-            if (appNav) {
-                const navContent = appNav.querySelector('.nav-content');
-                if (navContent) {
-                    // 确保存在或创建操作按钮容器
-                    let pageActionsContainer = navContent.querySelector('.page-actions');
-                    if (!pageActionsContainer) {
-                        pageActionsContainer = document.createElement('div');
-                        pageActionsContainer.className = 'page-actions';
-                        navContent.appendChild(pageActionsContainer);
-                    }
-
-                    // 确保存在或创建系统按钮容器
-                    let systemActionsContainer = navContent.querySelector('.system-actions');
-                    if (!systemActionsContainer) {
-                        systemActionsContainer = document.createElement('div');
-                        systemActionsContainer.className = 'system-actions';
-                        navContent.appendChild(systemActionsContainer);
-                    }
-
-                    // 移动操作按钮
-                    if (pageActions && !pageActionsContainer.contains(pageActions)) {
-                        pageActionsContainer.appendChild(pageActions);
-                    }
-
-                    // 移动系统按钮
-                    if (languageButton && !systemActionsContainer.contains(languageButton)) {
-                        systemActionsContainer.appendChild(languageButton);
-                    }
-                    if (themeToggle && !systemActionsContainer.contains(themeToggle)) {
-                        systemActionsContainer.appendChild(themeToggle);
-                    }
-                }
-            }
-        } else {
-            // 竖屏模式：恢复按钮到顶栏
-            const headerActions = header?.querySelector('.header-actions');
-            if (headerActions) {
-                if (pageActions && !headerActions.contains(pageActions)) {
-                    headerActions.insertBefore(pageActions, headerActions.firstChild);
-                }
-                if (languageButton && !headerActions.contains(languageButton)) {
-                    headerActions.appendChild(languageButton);
-                }
-                if (themeToggle && !headerActions.contains(themeToggle)) {
-                    headerActions.appendChild(themeToggle);
-                }
-            }
-        }
+        LayoutManager.updateLayout();
     }
 
     static updateHeaderTransparency() {
@@ -1039,8 +2368,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const themeToggle = document.getElementById('theme-toggle');
     if (themeToggle) {
         themeToggle.addEventListener('click', () => {
-            if (window.ThemeManager?.toggleTheme) {
-                window.ThemeManager.toggleTheme();
+            if (window.app?.toggleTheme) {
+                window.app.toggleTheme();
             }
         });
     }
@@ -1078,10 +2407,7 @@ window.addEventListener('DOMContentLoaded', () => {
     // 初始化顶栏状态
     UI.updateHeaderTransparency();
 
-    // 绑定窗口大小变化事件
-    window.addEventListener('resize', () => {
-        UI.updateLayout();
-    });
+    // 布局事件由LayoutManager统一管理
 
     // 绑定历史记录变化事件
     window.addEventListener('popstate', () => {
@@ -1089,8 +2415,7 @@ window.addEventListener('DOMContentLoaded', () => {
         Router.navigate(pageName, false);
     });
 
-    // 初始化布局
-    UI.updateLayout();
+    // 布局已由LayoutManager统一管理
 
     // 初始化应用
     app.init().catch(error => {

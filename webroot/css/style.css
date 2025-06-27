@@ -2,14 +2,6 @@
  * AMMF WebUI 主样式文件
  * 基于MD3设计系统重构的统一样式
  */
-/* 导入MD3基础样式系统 */
-@import url('md3.css');
-@import url('pages/about.css');
-@import url('pages/settings.css');
-@import url('pages/status.css');
-@import url('pages/logs.css');
-@import url('animations.css');
-@import url('components.css');
 
 /* ===== 基础变量 ===== */
 :root {
@@ -98,18 +90,13 @@
   color: var(--on-surface);
   transition: background-color 0.4s ease, box-shadow 0.4s ease;
   border: none;
-  display: flex;
+    display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .app-header.header-solid {
   background-color: var(--surface-container);
-}
-
-.mmrl-environment .app-header {
-  height: 48px;
-  padding-top: env(safe-area-inset-top);
 }
 
 .header-content {
@@ -145,6 +132,18 @@
   gap: var(--spacing-xs);
   margin-left: auto;
   z-index: 1;
+}
+.page-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+.system-buttons {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--spacing-xs);
 }
 
 /* ===== 主内容区域 ===== */
@@ -356,7 +355,7 @@ html, body, #main-content, .language-options, .app-nav {
   .nav-content .icon-button {
     width: var(--icon-size);
     height: var(--icon-size);
-    border-radius: var(--border-radius-l);
+    border-radius: var(--border-radius-xl);
   }
 
   .nav-content ul {
@@ -365,12 +364,13 @@ html, body, #main-content, .language-options, .app-nav {
     padding: 0;
     margin: 0 0 8px 0;
     gap: 4px;
-    height: 240px;
-    flex-shrink: 0;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .nav-content .page-actions {
-    margin: auto;
+    margin: 16px auto;
     padding: 12px 0;
     display: flex;
     flex-direction: column;
@@ -379,10 +379,12 @@ html, body, #main-content, .language-options, .app-nav {
     background-color: var(--surface-container-low);
     border-radius: var(--border-radius-xl);
     width: 56px;
-    min-height: 144px;
+    min-height: 80px;
+    max-height: 200px;
     overflow-y: auto;
     flex-shrink: 0;
     justify-content: center;
+    align-self: center;
   }
 
   .nav-content .system-actions {
@@ -396,6 +398,13 @@ html, body, #main-content, .language-options, .app-nav {
     flex-shrink: 0;
     background-color: var(--surface-container);
     width: 100%;
+    min-height: 80px;
+  }
+  
+  .nav-content .system-actions .icon-button {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--border-radius-xl);
   }
 }
 

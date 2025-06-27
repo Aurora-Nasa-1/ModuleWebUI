@@ -17,20 +17,29 @@ const I18n = {
         en: {},
         ru: {}
     },
-    // 添加语言切换处理器集合
-    languageChangeHandlers: new Set(),
+
 
     async init() {
         try {
             console.log('开始初始化语言模块...');
-            await this.loadTranslations();
-            // 加载模块翻译文件
-            await this.loadModuleTranslations();
+            
+            // 并行加载翻译文件
+            await Promise.all([
+                this.loadTranslations(),
+                this.loadModuleTranslations()
+            ]);
+            
             await this.determineInitialLanguage();
             this.applyTranslations();
-            this.initLanguageSelector();
             this.observeDOMChanges();
+            
             console.log(`语言模块初始化完成: ${this.currentLang}`);
+            
+            // 分发初始化完成事件
+            document.dispatchEvent(new CustomEvent('i18nReady', {
+                detail: { language: this.currentLang }
+            }));
+            
             return true;
         } catch (error) {
             console.error('初始化语言模块失败:', error);
@@ -39,26 +48,7 @@ const I18n = {
         }
     },
 
-    // 从App类移植的方法：注册语言切换处理器
-    registerLanguageChangeHandler(handler) {
-        if (typeof handler === 'function') {
-            this.languageChangeHandlers.add(handler);
-        }
-    },
 
-    // 从App类移植的方法：注销语言切换处理器
-    unregisterLanguageChangeHandler(handler) {
-        this.languageChangeHandlers.delete(handler);
-    },
-
-    // 通用防抖函数
-    debounce(func, wait) {
-        let timeout;
-        return function (...args) {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func.apply(this, args), wait);
-        };
-    },
 
     async loadTranslations() {
         try {
@@ -170,12 +160,18 @@ const I18n = {
     },
 
     applyTranslations() {
+        // 更新页面标题
+        const pageTitle = this.translate('PAGE_TITLE');
+        if (pageTitle && pageTitle !== 'PAGE_TITLE') {
+            document.title = pageTitle;
+        }
+
         // 处理带有 data-i18n 属性的元素
         const elements = document.querySelectorAll('[data-i18n]');
         elements.forEach(el => {
             const key = el.getAttribute('data-i18n');
             const translation = this.translate(key);
-            if (translation) {
+            if (translation && translation !== key) {
                 el.textContent = translation;
             }
         });
@@ -185,7 +181,7 @@ const I18n = {
         placeholderElements.forEach(el => {
             const key = el.getAttribute('data-i18n-placeholder');
             const translation = this.translate(key);
-            if (translation) {
+            if (translation && translation !== key) {
                 el.setAttribute('placeholder', translation);
             }
         });
@@ -195,7 +191,7 @@ const I18n = {
         titleElements.forEach(el => {
             const key = el.getAttribute('data-i18n-title');
             const translation = this.translate(key);
-            if (translation) {
+            if (translation && translation !== key) {
                 el.setAttribute('title', translation);
             }
         });
@@ -205,10 +201,32 @@ const I18n = {
         labelElements.forEach(el => {
             const key = el.getAttribute('data-i18n-label');
             const translation = this.translate(key);
-            if (translation && el.querySelector('.switch-label')) {
+            if (translation && translation !== key && el.querySelector('.switch-label')) {
                 el.querySelector('.switch-label').textContent = translation;
             }
         });
+        
+        // 处理带有 data-i18n-aria-label 属性的元素
+        const ariaLabelElements = document.querySelectorAll('[data-i18n-aria-label]');
+        ariaLabelElements.forEach(el => {
+            const key = el.getAttribute('data-i18n-aria-label');
+            const translation = this.translate(key);
+            if (translation && translation !== key) {
+                el.setAttribute('aria-label', translation);
+            }
+        });
+        
+        // 处理带有 data-i18n-value 属性的元素（如按钮值）
+        const valueElements = document.querySelectorAll('[data-i18n-value]');
+        valueElements.forEach(el => {
+            const key = el.getAttribute('data-i18n-value');
+            const translation = this.translate(key);
+            if (translation && translation !== key) {
+                el.setAttribute('value', translation);
+            }
+        });
+        
+        console.log(`已应用翻译到 ${elements.length + placeholderElements.length + titleElements.length + labelElements.length + ariaLabelElements.length + valueElements.length} 个元素`);
     },
 
     translate(key, defaultText = '') {
@@ -231,133 +249,6 @@ const I18n = {
         return this.translations[this.currentLang][key] || defaultText || key;
     },
 
-    // 优化后的关闭语言选择器方法
-    closeLanguageSelector() {
-        const selector = document.getElementById('language-selector');
-        if (!selector || selector.classList.contains('closing')) return;
-
-        // 添加关闭动画类
-        selector.classList.add('closing');
-        
-        // 获取选择器内容元素并添加关闭动画类
-        const content = selector.querySelector('.language-selector-content');
-        if (content) {
-            content.classList.add('closing');
-        }
-
-        // 使用单一setTimeout，等待动画完成后再移除类
-        setTimeout(() => {
-            selector.classList.remove('active');
-            selector.classList.remove('closing');
-            if (content) {
-                content.classList.remove('closing');
-            }
-        }, 200); // 与CSS动画时间匹配
-    },
-
-    // 优化后的语言选择器初始化方法
-    initLanguageSelector() {
-        const languageButton = document.getElementById('language-button');
-        if (!languageButton) {
-            console.error('找不到语言选择器按钮');
-            return;
-        }
-
-        // 使用已有的语言选择器容器
-        const languageSelector = document.getElementById('language-selector');
-        if (!languageSelector) {
-            console.error('找不到语言选择器容器');
-            return;
-        }
-
-        // 获取内容区域元素
-        const content = languageSelector.querySelector('.language-selector-content');
-        if (!content) {
-            console.error('找不到语言选择器内容区域');
-            return;
-        }
-
-        // 阻止内容区域的点击事件冒泡
-        content.addEventListener('click', (event) => {
-            event.stopPropagation();
-        });
-
-        // 设置语言按钮点击事件
-        languageButton.addEventListener('click', () => {
-            // 使用UI类的方法显示覆盖层
-            if (window.UI && window.UI.showOverlay) {
-                window.UI.showOverlay(languageSelector);
-            } else {
-                languageSelector.classList.add('active');
-            }
-        });
-
-        // 添加点击遮罩关闭功能
-        languageSelector.addEventListener('click', (event) => {
-            // 确保点击的是遮罩层而不是内容区域或其子元素
-            if (event.target === languageSelector && !event.target.closest('.language-selector-content')) {
-                this.closeLanguageSelector();
-            }
-        });
-
-        // 设置取消按钮点击事件
-        const cancelButton = document.getElementById('cancel-language');
-        if (cancelButton) {
-            cancelButton.addEventListener('click', () => {
-                this.closeLanguageSelector();
-            });
-        }
-
-        // 更新语言选项
-        this.updateLanguageSelector();
-    },
-
-    updateLanguageSelector() {
-        const languageOptions = document.getElementById('language-options');
-        if (!languageOptions) return;
-
-        languageOptions.innerHTML = '';
-
-        this.supportedLangs.forEach(lang => {
-            const option = document.createElement('div');
-            option.className = `language-option ${lang === this.currentLang ? 'selected' : ''}`;
-            option.setAttribute('data-lang', lang);
-
-            const radioInput = document.createElement('input');
-            radioInput.type = 'radio';
-            radioInput.name = 'language';
-            radioInput.id = `lang-${lang}`;
-            radioInput.value = lang;
-            radioInput.checked = lang === this.currentLang;
-            radioInput.className = 'md-radio';
-
-            const label = document.createElement('label');
-            label.htmlFor = `lang-${lang}`;
-            label.textContent = this.getLanguageDisplayName(lang);
-
-            option.appendChild(radioInput);
-            option.appendChild(label);
-
-            option.addEventListener('click', async () => {
-                // 如果点击的是当前语言，只关闭选择器
-                if (lang === this.currentLang) {
-                    this.closeLanguageSelector();
-                    return;
-                }
-
-                // 先关闭语言选择器，然后再切换语言
-                this.closeLanguageSelector();
-
-                // 切换语言
-                if (lang !== this.currentLang) {
-                await this.setLanguage(lang);
-                    this.updateLanguageSelector();
-                }
-            });
-
-            languageOptions.appendChild(option);
-        });
-    },
 
     // 优化后的语言切换方法
     async setLanguage(lang) {
@@ -366,111 +257,119 @@ const I18n = {
             return false;
         }
 
-        if (this.currentLang === lang) {
-            console.log(`已经是当前语言: ${lang}`);
+        if (lang === this.currentLang) {
             return true;
         }
 
-        this.currentLang = lang;
-        localStorage.setItem('currentLanguage', lang);
-
-        // 应用翻译
-        this.applyTranslations();
-
-        // 触发语言变化事件
-        this.notifyLanguageChange(lang);
-
-        console.log(`语言已切换为: ${lang}`);
-        return true;
-    },
-
-    // 新增：通知所有语言变化处理器
-    notifyLanguageChange(lang) {
-        // 创建并分发自定义事件
-        document.dispatchEvent(new CustomEvent('languageChanged', {
-            detail: { language: lang }
-        }));
-
-        // 使用防抖函数通知所有注册的处理器
-        const debouncedNotify = this.debounce(() => {
-            // 通知所有注册的处理器
-            this.languageChangeHandlers.forEach(handler => {
-                try {
-                    handler(lang);
-                } catch (error) {
-                    console.error('Language change handler failed:', error);
-                }
-            });
-        }, 100);
-
-        debouncedNotify();
-    },
-
-    getLanguageDisplayName(lang) {
-        switch (lang) {
-            case 'zh': return '中文';
-            case 'en': return 'English';
-            case 'ru': return 'Русский';
-            default: return lang.toUpperCase();
+        try {
+            const oldLang = this.currentLang;
+            this.currentLang = lang;
+            localStorage.setItem('selectedLanguage', lang);
+            
+            // 清理渲染缓存以确保新语言立即生效
+            if (window.app && typeof window.app.clearRenderCache === 'function') {
+                window.app.clearRenderCache();
+            }
+            
+            // 应用翻译到静态元素
+            this.applyTranslations();
+            
+            // 通知其他组件语言已更改
+            this.notifyLanguageChange(lang, oldLang);
+            
+            console.log(`语言已切换到: ${lang}`);
+            return true;
+        } catch (error) {
+            console.error('切换语言失败:', error);
+            return false;
         }
+    },
+
+    // 通知语言变化
+    notifyLanguageChange(lang, oldLang = null) {
+        // 分发自定义事件，让其他模块处理UI更新
+        document.dispatchEvent(new CustomEvent('languageChanged', {
+            detail: { 
+                language: lang,
+                oldLanguage: oldLang,
+                timestamp: Date.now()
+            }
+        }));
+    },
+
+
+
+    // 防抖函数
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
     },
 
     // 优化后的DOM变化观察方法
     observeDOMChanges() {
-        // 使用防抖函数减少频繁调用
+        if (this.observer) {
+            this.observer.disconnect();
+        }
+
+        // 使用防抖函数优化性能
         const debouncedApplyTranslations = this.debounce(() => {
             this.applyTranslations();
-        }, 50);
+        }, 300);
 
-        // 使用 MutationObserver 监听 DOM 变化
-        const observer = new MutationObserver((mutations) => {
-            let shouldApply = false;
-
-            // 检查是否有新增的需要翻译的元素
-            for (const mutation of mutations) {
-                if (mutation.type === 'childList' && mutation.addedNodes.length) {
-                    for (const node of mutation.addedNodes) {
+        this.observer = new MutationObserver((mutations) => {
+            let shouldUpdate = false;
+            
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'childList') {
+                    // 检查新增的节点是否包含需要翻译的元素
+                    mutation.addedNodes.forEach((node) => {
                         if (node.nodeType === Node.ELEMENT_NODE) {
-                            // 检查新增元素或其子元素是否包含需要翻译的属性
-                            if (
-                                node.hasAttribute && (
-                                    node.hasAttribute('data-i18n') ||
-                                    node.hasAttribute('data-i18n-placeholder') ||
-                                    node.hasAttribute('data-i18n-title') ||
-                                    node.hasAttribute('data-i18n-label') ||
-                                    node.querySelector('[data-i18n], [data-i18n-placeholder], [data-i18n-title], [data-i18n-label]')
-                                )
-                            ) {
-                                shouldApply = true;
-                                break;
+                            if (node.hasAttribute && (
+                                node.hasAttribute('data-i18n') ||
+                                node.hasAttribute('data-i18n-placeholder') ||
+                                node.hasAttribute('data-i18n-title') ||
+                                node.hasAttribute('data-i18n-label') ||
+                                node.querySelector && node.querySelector('[data-i18n], [data-i18n-placeholder], [data-i18n-title], [data-i18n-label]')
+                            )) {
+                                shouldUpdate = true;
                             }
                         }
+                    });
+                } else if (mutation.type === 'attributes') {
+                    // 检查属性变化是否涉及翻译相关属性
+                    const attrName = mutation.attributeName;
+                    if (attrName && (
+                        attrName.startsWith('data-i18n') ||
+                        attrName === 'data-i18n-placeholder' ||
+                        attrName === 'data-i18n-title' ||
+                        attrName === 'data-i18n-label'
+                    )) {
+                        shouldUpdate = true;
                     }
                 }
+            });
 
-                if (shouldApply) break;
-            }
-
-            // 如果有需要翻译的元素，应用翻译
-            if (shouldApply) {
+            if (shouldUpdate) {
                 debouncedApplyTranslations();
             }
         });
 
-        // 配置观察选项
-        const config = {
+        // 开始观察DOM变化
+        this.observer.observe(document.body, {
             childList: true,
-            subtree: true
-        };
-
-        // 开始观察 document.body
-        observer.observe(document.body, config);
-
-        // 监听页面变化事件
-        document.addEventListener('pageChanged', () => {
-            // 使用 requestAnimationFrame 确保在下一帧渲染前应用翻译
-            requestAnimationFrame(() => this.applyTranslations());
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['data-i18n', 'data-i18n-placeholder', 'data-i18n-title', 'data-i18n-label']
         });
+
+        console.log('DOM变化观察器已启动');
     },
 
     // 基础翻译（如果翻译文件加载失败时使用）

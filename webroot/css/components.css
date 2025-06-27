@@ -126,70 +126,6 @@
     background-color: var(--on-primary-container);
 }
 
-/* ===== 单选按钮 ===== */
-.md-radio {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 22px;
-    height: 22px;
-    border: 2px solid var(--outline);
-    border-radius: 50%;
-    margin: 0 var(--spacing-m) 0 0;
-    position: relative;
-    transition: border-color var(--tra), background-color var(--tra);
-}
-
-.md-radio:checked {
-    border-color: var(--primary);
-    background-color: transparent;
-    border-width: 2px;
-}
-
-.md-radio:checked::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 11px;
-    height: 11px;
-    background-color: var(--primary);
-    border-radius: 50%;
-}
-
-.md-radio:focus-visible {
-    outline: 2px solid var(--primary);
-    outline-offset: 2px;
-}
-
-.md-radio:focus {
-    outline: none;
-    box-shadow: 0 0 0 2px var(--primary-container);
-}
-
-/* ===== 弹出菜单 ===== */
-.md-popover {
-    border-radius: var(--border-radius-l);
-    background-color: var(--surface-container);
-    width: 280px;
-    max-width: 90vw;
-    overflow: hidden;
-}
-
-.popover-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-l);
-    border-bottom: 1px solid var(--outline-variant);
-}
-
-.popover-header h3 {
-    margin: 0;
-    font: var(--headline-s);
-    color: var(--on-surface);
-}
-
 /* ===== Toast通知 ===== */
 #toast-container {
     position: fixed;
@@ -291,19 +227,6 @@
     mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="m336-280 144-144 144 144 56-56-144-144 144-144-56-56-144 144-144-144-56 56 144 144-144 144 56 56ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z"/></svg>');
 }
 
-/**
-   * AMMF WebUI 通用组件样式
-   * 基于 Material Design 3 设计系统
-   */
-
-/* 空状态 */
-.empty-state {
-    padding: var(--spacing-l);
-    text-align: center;
-    color: var(--on-surface-variant);
-    font: var(--body-m);
-}
-
 /* 加载状态 */
 .loading-overlay {
     display: none;
@@ -320,89 +243,55 @@
     opacity: 0;
     transition: opacity var(--tra), visibility var(--tra);
 }
-
-.loading-spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid color-mix(in oklch, var(--on-surface) 10%, transparent);
-    border-radius: 50%;
-    border-top-color: var(--primary);
-    animation: spin 1s ease-in-out infinite;
+/* ===== Radio Buttons (Material Design 3) ===== */
+.radio {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--outline);
+  border-radius: 50%;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: transparent;
+  margin: 0;
+  flex-shrink: 0;
 }
 
-/* 对话框样式 */
-.md-dialog {
-    background-color: var(--surface-container-high);
-    border-radius: 28px;
-    border: none;
-    padding: var(--spacing-xl);
-    min-width: 280px;
-    max-width: 560px;
-    overflow: hidden;
+.radio:hover {
+  border-color: var(--on-surface);
 }
 
-.md-dialog h2 {
-    font: var(--headline-s);
-    color: var(--on-surface);
-    margin: 0 0 var(--spacing-l);
+.radio:checked {
+  border-color: var(--primary);
+  border-width: 2px;
 }
 
-.md-dialog p {
-    font: var(--body-m);
-    color: var(--on-surface-variant);
-    margin: 0 0 var(--spacing-xl);
+.radio:checked::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 对话框按钮容器 */
-.md-dialog .dialog-buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--spacing-s);
-    margin: var(--spacing-xl) calc(-1 * var(--spacing-xl)) calc(-1 * var(--spacing-xl));
-    padding: var(--spacing-l) var(--spacing-xl);
-    border-top: 1px solid var(--outline-variant);
-    background-color: var(--surface-container-highest);
+.radio:focus {
+  outline: none;
+  box-shadow: 0 0 0 8px color-mix(in oklch, var(--primary) 12%, transparent);
 }
 
-/* 对话框按钮 */
-.md-dialog .dialog-button {
-    min-width: 72px;
-    height: 40px;
-    padding: 0 var(--spacing-xl);
-    border-radius: 20px;
-    border: none;
-    font: var(--label-l);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: background-color var(--tra);
+.radio:disabled {
+  border-color: color-mix(in oklch, var(--on-surface) 38%, transparent);
+  cursor: not-allowed;
 }
 
-.md-dialog .dialog-button.filled {
-    background-color: var(--primary);
-    color: var(--on-primary);
-}
-
-.md-dialog .dialog-button.filled:hover {
-    background-color: color-mix(in oklch, var(--primary) 92%, black);
-}
-
-.md-dialog .dialog-button:not(.filled) {
-    background-color: transparent;
-    color: var(--primary);
-}
-
-.md-dialog .dialog-button:not(.filled):hover {
-    background-color: color-mix(in oklch, var(--primary) 8%, transparent);
-}
-
-@keyframes spin {
-    0% {
-        transform: rotate(0deg);
-    }
-
-    100% {
-        transform: rotate(360deg);
-    }
+.radio:disabled:checked::before {
+  background-color: color-mix(in oklch, var(--on-surface) 38%, transparent);
 }

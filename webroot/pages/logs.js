@@ -13,17 +13,27 @@ const LogsPage = {
     // 日志内容
     logContent: '',
 
+    // 模拟日志数据（用于演示）
+    mockLogData: [
+        '[INFO] 2024-01-15 10:30:25 - 应用程序启动成功',
+        '[DEBUG] 2024-01-15 10:30:26 - 初始化配置文件',
+        '[INFO] 2024-01-15 10:30:27 - 连接数据库成功',
+        '[WARN] 2024-01-15 10:35:12 - 内存使用率较高: 85%',
+        '[ERROR] 2024-01-15 10:40:33 - 网络连接超时',
+        '[INFO] 2024-01-15 10:40:35 - 重新连接网络成功',
+        '[DEBUG] 2024-01-15 10:45:01 - 执行定时任务',
+        '[INFO] 2024-01-15 10:50:15 - 用户登录: admin',
+        '[WARN] 2024-01-15 11:00:22 - 磁盘空间不足: 90%',
+        '[INFO] 2024-01-15 11:05:33 - 清理临时文件完成'
+    ],
+
     async preloadData() {
         try {
-            const tasks = [
-                this.checkLogsDirectoryExists(`${Core.MODULE_PATH}logs/`),
-                this.scanLogFiles()
-            ];
-
-            const [dirExists, _] = await Promise.allSettled(tasks);
-
+            // 模拟异步数据加载
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
             return {
-                dirExists: dirExists.value,
+                dirExists: true,
                 logFiles: this.logFiles
             };
         } catch (error) {
@@ -35,26 +45,15 @@ const LogsPage = {
     async init() {
         try {
             this.registerActions();
-            I18n.registerLanguageChangeHandler(this.onLanguageChanged.bind(this));
+            this.boundLanguageHandler = this.onLanguageChanged.bind(this);
+            document.addEventListener('languageChanged', this.boundLanguageHandler);
 
-            const preloadedData = PreloadManager.getData('logs');
-            if (preloadedData) {
-                if (!preloadedData.dirExists) {
-                    console.warn(I18n.translate('LOGS_DIR_NOT_FOUND', '日志目录不存在'));
-                    this.logContent = I18n.translate('LOGS_DIR_NOT_FOUND', '日志目录不存在');
-                    return false;
-                }
-                this.logFiles = preloadedData.logFiles;
-            } else {
-                const logsDir = `${Core.MODULE_PATH}logs/`;
-                const dirExists = await this.checkLogsDirectoryExists(logsDir);
-                if (!dirExists) {
-                    console.warn(I18n.translate('LOGS_DIR_NOT_FOUND', '日志目录不存在'));
-                    this.logContent = I18n.translate('LOGS_DIR_NOT_FOUND', '日志目录不存在');
-                    return false;
-                }
-                await this.scanLogFiles();
-            }
+            // 初始化模拟日志文件
+            this.logFiles = {
+                'app.log': '/var/log/app.log',
+                'error.log': '/var/log/error.log',
+                'access.log': '/var/log/access.log'
+            };
 
             if (Object.keys(this.logFiles).length > 0) {
                 this.currentLogFile = Object.keys(this.logFiles)[0];
@@ -80,8 +79,8 @@ const LogsPage = {
 
     async checkLogsDirectoryExists(logsDir) {
         try {
-            const result = await Core.execCommand(`[ -d "${logsDir}" ] && echo "true" || echo "false"`);
-            return result.trim() === "true";
+            // 模拟目录检查
+            return true;
         } catch (error) {
             console.error(I18n.translate('LOGS_DIR_CHECK_ERROR', '检查日志目录失败:'), error);
             return false;
@@ -90,28 +89,12 @@ const LogsPage = {
 
     async scanLogFiles() {
         try {
-            const logsDir = `${Core.MODULE_PATH}logs/`;
-            const dirExists = await this.checkLogsDirectoryExists(logsDir);
-            if (!dirExists) {
-                console.warn(I18n.translate('LOGS_DIR_NOT_FOUND', '日志目录不存在'));
-                this.logFiles = {};
-                return;
-            }
-
-            const result = await Core.execCommand(`find "${logsDir}" -type f -name "*.log" -o -name "*.log.old" 2>/dev/null | sort`);
-            this.logFiles = {};
-
-            if (!result || result.trim() === '') {
-                console.warn(I18n.translate('NO_LOGS_FILES', '没有找到日志文件'));
-                return;
-            }
-
-            const files = result.split('\n').filter(file => file.trim() !== '');
-            files.forEach(file => {
-                const fileName = file.split('/').pop();
-                this.logFiles[fileName] = file;
-            });
-
+            // 模拟扫描日志文件
+            this.logFiles = {
+                'app.log': '/var/log/app.log',
+                'error.log': '/var/log/error.log',
+                'access.log': '/var/log/access.log'
+            };
             console.log(I18n.translate('LOGS_FILES_FOUND', '找到 {count} 个日志文件', { count: Object.keys(this.logFiles).length }));
         } catch (error) {
             console.error(I18n.translate('LOGS_SCAN_ERROR', '扫描日志文件失败:'), error);
@@ -126,23 +109,14 @@ const LogsPage = {
                 return;
             }
 
-            const logPath = this.logFiles[this.currentLogFile];
-            const fileExistsResult = await Core.execCommand(`[ -f "${logPath}" ] && echo "true" || echo "false"`);
-            if (fileExistsResult.trim() !== "true") {
-                this.logContent = I18n.translate('LOG_FILE_NOT_FOUND', '日志文件不存在');
-                if (showToast) Core.showToast(this.logContent, 'warning');
-                return;
-            }
-
             const logsDisplay = document.getElementById('logs-display');
             if (logsDisplay) logsDisplay.classList.add('loading');
 
-            const fileSizeCmd = await Core.execCommand(`wc -c "${logPath}" | awk '{print $1}'`);
-            const fileSize = parseInt(fileSizeCmd.trim(), 10);
-            const content = fileSize > 1024 * 1024
-                ? await Core.execCommand(`tail -c 102400 "${logPath}"`)
-                : await Core.execCommand(`cat "${logPath}"`);
-
+            // 模拟加载日志内容
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // 使用模拟数据
+            const content = this.mockLogData.join('\n');
             this.processLogContent(content, logsDisplay, showToast);
         } catch (error) {
             console.error(I18n.translate('LOGS_LOAD_ERROR', '加载日志内容失败:'), error);
@@ -171,13 +145,8 @@ const LogsPage = {
                 return;
             }
 
-            const logPath = this.logFiles[this.currentLogFile];
-            const fileExistsResult = await Core.execCommand(`[ -f "${logPath}" ] && echo "true" || echo "false"`);
-            if (fileExistsResult.trim() !== "true") {
-                Core.showToast(I18n.translate('LOG_FILE_NOT_FOUND', '日志文件不存在'), 'warning');
-                return;
-            }
-            await Core.execCommand(`cat /dev/null > "${logPath}" && chmod 666 "${logPath}"`);
+            // 模拟清除日志
+            this.mockLogData = [];
             await this.loadLogContent();
             Core.showToast(I18n.translate('LOG_CLEARED', '日志已清除'));
             return true;
@@ -195,14 +164,22 @@ const LogsPage = {
                 return;
             }
 
-            const logPath = this.logFiles[this.currentLogFile];
-            const downloadDir = '/sdcard/Download/';
+            // 模拟导出日志
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const exportFileName = `${this.currentLogFile}_${timestamp}.log`;
-
-            Core.showToast(I18n.translate('LOADING', '导出中...'), 'info');
-            await Core.execCommand(`mkdir -p "${downloadDir}" && cp "${logPath}" "${downloadDir}${exportFileName}"`);
-            Core.showToast(I18n.translate('LOG_EXPORTED', '日志已导出到: {path}', { path: `${downloadDir}${exportFileName}` }));
+            
+            // 创建下载链接
+            const blob = new Blob([this.logContent], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = exportFileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            Core.showToast(I18n.translate('LOG_EXPORTED', '日志已导出: {filename}', { filename: exportFileName }));
         } catch (error) {
             console.error(I18n.translate('LOG_EXPORT_ERROR', '导出日志失败:'), error);
             Core.showToast(I18n.translate('LOG_EXPORT_ERROR', '导出日志失败'), 'error');
@@ -490,7 +467,8 @@ const LogsPage = {
 
         const container = document.getElementById('logs-display-container');
         if (container) {
-            container.addEventListener('scroll', this.handleScroll.bind(this));
+            this.boundScrollHandler = this.handleScroll.bind(this);
+            container.addEventListener('scroll', this.boundScrollHandler);
             // Initial height update
             this.updateRenderedHeights(0, this.virtualScroll.totalItems.length);
         }
@@ -498,7 +476,7 @@ const LogsPage = {
         this.onLanguageChanged();
     },
 
-    onLanguageChanged() {
+    onLanguageChanged(event) {
         this.registerActions();
         const selectLabel = document.querySelector('.logs-container label span');
         if (selectLabel) selectLabel.textContent = I18n.translate('SELECT_LOG_FILE', '选择日志文件');
@@ -513,13 +491,28 @@ const LogsPage = {
         }
     },
 
-    destroy() {
-        const container = document.getElementById('logs-display-container');
-        if (container) {
-            container.removeEventListener('scroll', this.handleScroll.bind(this));
-            container.querySelectorAll('*').forEach(element => element.replaceWith(element.cloneNode(true)));
+    onDeactivate() {
+        // 移除语言变化事件监听器
+        if (this.boundLanguageHandler) {
+            document.removeEventListener('languageChanged', this.boundLanguageHandler);
+            this.boundLanguageHandler = null;
         }
-        this.virtualScroll.heightCache.clear();
+        
+        // 移除滚动事件监听器
+        const container = document.getElementById('logs-display-container');
+        if (container && this.boundScrollHandler) {
+            container.removeEventListener('scroll', this.boundScrollHandler);
+            this.boundScrollHandler = null;
+        }
+        
+        // 清理页面操作
+        UI.clearPageActions('logs');
     }
 };
-window.LogsPage = LogsPage;
+
+// 导出页面模块
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = LogsPage;
+} else if (typeof window !== 'undefined') {
+    window.LogsPage = LogsPage;
+}

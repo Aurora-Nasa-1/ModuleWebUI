@@ -74,7 +74,7 @@
     padding: var(--spacing-l);
     max-height: calc(80vh - 60px);
     overflow-y: auto;
-    font-family: var(--font-mono);
+    font-family: 'Roboto Mono', monospace;
     white-space: pre-wrap;
     font: var(--body-m);
     line-height: 1.5;
@@ -139,12 +139,7 @@
 }
 
 .update-icon .rotating {
-    animation: rotate 2s linear infinite;
-}
-
-@keyframes rotate {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    animation: spin 2s linear infinite;
 }
 
 .update-text {
@@ -183,7 +178,6 @@
     font: var(--label-m);
     font-weight: 600;
     color: currentColor;
-    font-family: var(--font-mono);
 }
 
 .version-date {
@@ -207,18 +201,15 @@
     cursor: pointer;
     min-width: 120px;
     justify-content: center;
-    box-shadow: var(--elevation-1);
     transition: all var(--tra);
 }
 .update-button:hover {
     background-color: color-mix(in oklch, var(--primary) 92%, black);
-    box-shadow: var(--elevation-2);
     transform: translateY(-1px);
 }
 
 .update-button:active {
-    background-color: color-mix(in oklch, var(--primary) 88%, black);
-    box-shadow: var(--elevation-1);
+    background-color: color-mix(in oklch, var(--primary) 88%, black);;
     transform: translateY(0);
 }
 

@@ -196,8 +196,9 @@ const StatusPage = {
             // 注册操作按钮
             this.registerActions();
 
-            // 注册语言切换处理器
-            I18n.registerLanguageChangeHandler(this.onLanguageChanged.bind(this));
+            // 监听语言变化事件
+            this.boundLanguageHandler = this.onLanguageChanged.bind(this);
+            document.addEventListener('languageChanged', this.boundLanguageHandler);
 
             // 获取预加载的数据
             const preloadedData = PreloadManager.getData('status');
@@ -290,6 +291,9 @@ const StatusPage = {
                 onClick: 'runAction'
             }
         ]);
+        
+        // 立即更新已存在的按钮标题
+        this.updateActionButtonTitles();
     },
     // 修改渲染方法中的状态卡片部分
     render() {
@@ -726,18 +730,60 @@ const StatusPage = {
         }
     },
     // 添加语言切换处理方法
-    onLanguageChanged() {
-        const statusPage = document.querySelector('.status-page');
-        if (statusPage) {
-            statusPage.innerHTML = this.render();
-            this.afterRender();
+    onLanguageChanged(event) {
+        console.log('状态页面处理语言变化:', event.detail?.language);
+        
+        // 清理应用的渲染缓存
+        if (window.app && typeof window.app.clearRenderCache === 'function') {
+            window.app.clearRenderCache();
         }
+        
+        // 重新注册操作按钮以更新标题
+        this.registerActions();
+        
+        // 使用应用的重新渲染方法，保持页面布局
+        if (window.app && typeof window.app.renderPage === 'function') {
+            window.app.renderPage('status');
+        } else {
+            // 备用方案：温和地更新页面内容
+            this.updatePageContent();
+        }
+    },
+
+    // 温和地更新页面内容，避免破坏布局
+    updatePageContent() {
+        // 应用翻译到现有元素
+        I18n.applyTranslations();
+        
+        // 更新状态相关的文本
+        const statusText = document.querySelector('.status-text');
+        if (statusText) {
+            statusText.textContent = this.getStatusText();
+        }
+        
+        // 更新设备信息标题
+        const deviceInfoTitle = document.querySelector('.device-info h3');
+        if (deviceInfoTitle) {
+            deviceInfoTitle.textContent = I18n.translate('DEVICE_INFO', '设备信息');
+        }
+        
+        // 更新更新横幅（如果存在）
+        const updateBannerContainer = document.querySelector('.update-banner-container');
+        if (updateBannerContainer && this.updateAvailable) {
+            updateBannerContainer.innerHTML = this.renderUpdateBanner();
+        }
+        
+        // 更新操作按钮标题
+        this.updateActionButtonTitles();
     },
 
     // 修改 onDeactivate 方法
     onDeactivate() {
-        // 注销语言切换处理器
-        I18n.unregisterLanguageChangeHandler(this.onLanguageChanged.bind(this));
+        // 移除语言变化事件监听器
+        if (this.boundLanguageHandler) {
+            document.removeEventListener('languageChanged', this.boundLanguageHandler);
+            this.boundLanguageHandler = null;
+        }
         // 停止自动刷新
         if (this.refreshTimer) {
             clearInterval(this.refreshTimer);
@@ -747,6 +793,21 @@ const StatusPage = {
         // 清理页面操作按钮
         UI.clearPageActions();
     },
+    
+    // 更新操作按钮标题
+    updateActionButtonTitles() {
+        const refreshBtn = document.getElementById('refresh-status');
+        const actionBtn = document.getElementById('run-action');
+        
+        if (refreshBtn) {
+            refreshBtn.title = I18n.translate('REFRESH', '刷新');
+        }
+        
+        if (actionBtn) {
+            actionBtn.title = I18n.translate('RUN_ACTION', '运行Action');
+        }
+    },
+    
     // 页面激活时的回调
     onActivate() {
         console.log('状态页面已激活');

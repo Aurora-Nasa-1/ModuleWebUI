@@ -283,39 +283,7 @@
     background-color: var(--surface-container);
     outline: none;
 }
-.dialog-buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--spacing-s);
-    padding: var(--spacing-l);
-    border-top: 1px solid var(--outline-variant);
-}
 
-.dialog-button {
-    padding: var(--spacing-s) var(--spacing-l);
-    border: 1px solid var(--outline);
-    border-radius: var(--border-radius-xl);
-    background-color: transparent;
-    color: var(--primary);
-    font: var(--label-m);
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.dialog-button:hover {
-    background-color: var(--primary-container);
-    color: var(--on-primary-container);
-}
-
-.dialog-button.filled {
-    background-color: var(--primary);
-    color: var(--on-primary);
-    border-color: var(--primary);
-}
-
-.dialog-button.filled:hover {
-    background-color: var(--primary-dark);
-}
 
 /* 响应式设计 */
 @media (min-width: 768px) {
