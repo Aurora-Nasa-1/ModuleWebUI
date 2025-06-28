@@ -1,128 +1,73 @@
 <!DOCTYPE html>
 <html lang="zh">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
-    <script src="core.js"></script>
-    <script src="i18n.js"></script>
-    <script src="app.js"></script>
-    <style>
-      @font-face {
-        font-family: "Material Symbols Rounded";
-        font-style: normal;
-        font-weight: 100 700;
-        font-display: swap;
-        src: url(files/sykg-zNym6YjUruM-QrEh7-nyTnjDwKNJ_190Fjzag.woff2)
-          format("woff2");
-      }
-
-      .material-symbols-rounded {
-        font-family: "Material Symbols Rounded";
-        font-weight: normal;
-        font-style: normal;
-        font-size: 24px;
-        line-height: 1;
-        letter-spacing: normal;
-        text-transform: none;
-        display: inline-block;
-        white-space: nowrap;
-        word-wrap: normal;
-        direction: ltr;
-        -webkit-font-feature-settings: "liga";
-        -webkit-font-smoothing: antialiased;
-      }
-    </style>
-    <meta
-      name="apple-mobile-web-app-status-bar-style"
-      content="black-translucent"
-    />
-    <meta name="description" content="AMMF WebUI - 模块管理界面" />
-    <meta name="color-scheme" content="light dark" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="AMMF WebUI - 模块管理界面">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#6750a4">
     <title>AMMF WebUI</title>
+    <link rel="preload" href="files/sykg-zNym6YjUruM-QrEh7-nyTnjDwKNJ_190Fjzag.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="app.js" as="script">
     <style>
-      .app-header,
-      #main-content {
-        opacity: 1;
-        transition: opacity 0.3s ease;
-      }
-      .app-loaded .app-header,
-      .app-loaded #main-content {
-        opacity: 1;
-      }
-
-      html,
-      body {
-        overscroll-behavior: none;
-        background-color: var(--md-background);
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-        -ms-overflow-style: none;
-        height: 100%;
-        position: relative;
-      }
-
-      html::-webkit-scrollbar,
-      body::-webkit-scrollbar {
-        display: none;
-        width: 0;
-        height: 0;
-      }
-
-
+        @font-face{font-family:"Material Symbols Rounded";font-style:normal;font-weight:100 700;font-display:swap;src:url(files/sykg-zNym6YjUruM-QrEh7-nyTnjDwKNJ_190Fjzag.woff2) format("woff2")}
+        .material-symbols-rounded{font-family:"Material Symbols Rounded";font-weight:normal;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:"liga";-webkit-font-smoothing:antialiased}
+        html,body{margin:0;padding:0;height:100%;overflow-x:hidden;overscroll-behavior:none;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none}
+        html::-webkit-scrollbar,body::-webkit-scrollbar{display:none}
+        #app{min-height:100vh;display:flex;flex-direction:column;opacity:0;transition:opacity .3s ease}
+        .app-loaded #app{opacity:1}
+        .loading-screen{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;z-index:9999;background:#fff}
+        .loading-spinner{width:40px;height:40px;border:3px solid #e8def8;border-top:3px solid #6750a4;border-radius:50%;animation:spin 1s linear infinite}
+        @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
     </style>
-
-    <!-- CSS样式文件 -->
-    <link rel="stylesheet" href="css/md3.css" />
-    <link rel="stylesheet" href="css/components.css" />
-    <link rel="stylesheet" href="css/style.css" />
-    <link rel="stylesheet" href="css/animations.css" />
-    <link rel="stylesheet" href="css/pages/about.css" />
-    <link rel="stylesheet" href="css/pages/settings.css" />
-    <link rel="stylesheet" href="css/pages/status.css" />
-    <link rel="stylesheet" href="css/pages/logs.css" />
-  </head>
-  <body>
+    <link rel="stylesheet" href="css/md3.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/components.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/style.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/animations.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/pages/about.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/pages/status.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/pages/logs.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/pages/settings.css" media="print" onload="this.media='all'">
+    <link rel="modulepreload" href="main.js">
+    <link rel="modulepreload" href="core.js">
+    <link rel="modulepreload" href="app.js">
+</head>
+<body>
     <div id="app">
-      <!-- 头部 -->
-      <header class="app-header">
-        <div class="header-content">
-          <div class="header-title">
-            <h1 id="page-title">AMMF WebUI</h1>
-          </div>
-          <div class="header-actions">
-            <div id="page-actions" class="page-actions"></div>
-            <div id="system-buttons" class="system-buttons"></div>
-          </div>
+        <div id="loading-screen" class="loading-screen">
+            <div class="loading-spinner"></div>
         </div>
-      </header>
-
-      <!-- 主内容区域 -->
-      <main id="main-content">
-      </main>
-
-      <!-- 动态生成底栏导航 -->
-      <nav id="app-nav" class="app-nav"></nav>
-
-      <!-- 语言选择器 -->
-      <div id="language-selector" class="language-selector">
-        <div class="language-selector-content">
-          <div class="language-selector-header">
-            <h3 data-i18n="SELECT_LANGUAGE">选择语言</h3>
-          </div>
-          <div id="language-options" class="language-options"></div>
-          <div class="language-selector-footer">
-            <button id="cancel-language" class="icon-button" data-i18n="CANCEL">
-              取消
-            </button>
-          </div>
+        <header class="app-header">
+            <div class="header-content">
+                <h1 id="page-title">AMMF WebUI</h1>
+                <div class="header-actions">
+                    <div id="page-actions" class="page-actions"></div>
+                    <div id="system-buttons" class="system-buttons"></div>
+                </div>
+            </div>
+        </header>
+        <main id="main-content"></main>
+        <nav id="app-nav" class="app-nav"></nav>
+        <div id="language-selector" class="language-selector">
+            <div class="language-selector-content">
+                <h3 data-i18n="SELECT_LANGUAGE">选择语言</h3>
+                <div id="language-options" class="language-options"></div>
+                <button id="cancel-language" class="icon-button" data-i18n="CANCEL">取消</button>
+            </div>
         </div>
-      </div>
-
-      <!-- 吐司提示容器 -->
-      <div id="toast-container" class="toast-container"></div>
+        <div id="toast-container" class="toast-container"></div>
+        <div id="prerender-cache" style="display:none"></div>
     </div>
-  </body>
-</html>
+    <script type="module" src="main.js" defer></script>
+    <script type="module">
+        document.addEventListener('DOMContentLoaded', () => {
+            const loading = document.getElementById('loading-screen');
+            if (loading) {
+                loading.style.transition = 'opacity 0.3s ease';
+                loading.style.opacity = '0';
+                setTimeout(() => loading.remove(), 300);
+            }
+            document.documentElement.classList.add('app-loaded');
+        });
+    </script>

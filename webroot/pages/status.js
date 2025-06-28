@@ -3,7 +3,16 @@
  * 显示模块运行状态和基本信息
  */
 
-const StatusPage = {
+export const StatusPage = {
+    // 页面配置
+    config: {
+        id: 'status',
+        name: '状态',
+        icon: 'dashboard',
+        module: 'StatusPage',
+        i18n_key: 'NAV_STATUS'
+    },
+    
     // 模块状态
     moduleStatus: 'UNKNOWN',
     refreshTimer: null,
@@ -200,20 +209,10 @@ const StatusPage = {
             this.boundLanguageHandler = this.onLanguageChanged.bind(this);
             document.addEventListener('languageChanged', this.boundLanguageHandler);
 
-            // 获取预加载的数据
-            const preloadedData = PreloadManager.getData('status');
-            if (preloadedData) {
-                this.moduleInfo = preloadedData.moduleInfo;
-                this.deviceInfo = preloadedData.deviceInfo;
-                this.logCount = preloadedData.logCount;
-                this.latestVersion = preloadedData.latestVersion;
-                this.version = this.moduleInfo.version || 'Unknown';
-            } else {
-                // 如果没有预加载数据，则正常加载
-                await this.loadModuleInfo();
-                await this.loadDeviceInfo();
-                await this.getLogCount();
-            }
+            // 加载页面数据
+            await this.loadModuleInfo();
+            await this.loadDeviceInfo();
+            await this.getLogCount();
 
             await this.loadModuleStatus(); // 实时状态始终需要加载
             this.startAutoRefresh();
@@ -296,13 +295,57 @@ const StatusPage = {
         this.updateActionButtonTitles();
     },
     // 修改渲染方法中的状态卡片部分
+    async prerender() {
+        try {
+            await Promise.all([
+                this.loadModuleStatus(),
+                this.loadDeviceInfo(),
+                this.getLogCount()
+            ]);
+            return this.render();
+        } catch (e) {
+            return this.renderSkeleton();
+        }
+    },
+
+    renderSkeleton() {
+        return `
+        <div class="status-page">
+            <div class="status-card module-status-card loading">
+                <div class="status-card-content">
+                    <div class="status-icon-container">
+                        <span class="material-symbols-rounded">hourglass_empty</span>
+                    </div>
+                    <div class="status-info-container">
+                        <div class="status-title-row">
+                            <span class="status-value">加载中...</span>
+                        </div>
+                        <div class="status-details">
+                            <div class="status-detail-row">版本: --</div>
+                            <div class="status-detail-row">最后更新时间: --</div>
+                            <div class="status-detail-row">日志数: --</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="status-card device-info-card">
+                <div class="device-info-grid">
+                    <div class="device-info-item"><span class="device-info-label">设备型号:</span><span class="device-info-value">--</span></div>
+                    <div class="device-info-item"><span class="device-info-label">Android版本:</span><span class="device-info-value">--</span></div>
+                    <div class="device-info-item"><span class="device-info-label">内核版本:</span><span class="device-info-value">--</span></div>
+                    <div class="device-info-item"><span class="device-info-label">架构:</span><span class="device-info-value">--</span></div>
+                </div>
+            </div>
+        </div>
+        `;
+    },
+
     render() {
         return `
         <div class="status-page">
             <div class="update-banner-container">
                 ${this.updateAvailable ? this.renderUpdateBanner() : ''}
             </div>
-            <!-- 模块状态卡片 -->
             <div class="status-card module-status-card ${this.getStatusClass()}">
                 <div class="status-card-content">
                     <div class="status-icon-container">
@@ -320,8 +363,6 @@ const StatusPage = {
                     </div>
                 </div>
             </div>
-            
-            <!-- 设备信息卡片 -->
             <div class="status-card device-info-card">
                 <div class="device-info-grid">
                     ${this.renderDeviceInfo()}

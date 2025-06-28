@@ -3,7 +3,16 @@
  * 管理模块配置设置
  */
 
-const SettingsPage = {
+export const SettingsPage = {
+    // 页面配置
+    config: {
+        id: 'settings',
+        name: '设置',
+        icon: 'settings',
+        module: 'SettingsPage',
+        i18n_key: 'NAV_SETTINGS'
+    },
+    
     // 核心数据
     settings: {},
     settingsBackup: {},

@@ -3,12 +3,21 @@
  * 显示模块信息和版本
  */
 
-const AboutPage = {
+export const AboutPage = {
+    // 页面配置
+    config: {
+        id: 'about',
+        name: '关于',
+        icon: 'info',
+        module: 'AboutPage',
+        i18n_key: 'NAV_ABOUT'
+    },
+    
     // 模块信息
     moduleInfo: {},
     version: '8.0.1',
-    // 配置项
-    config: {
+    // 其他配置项
+    otherConfig: {
         showThemeToggle: false  // 控制是否显示主题切换按钮
     },
     
@@ -51,9 +60,8 @@ const AboutPage = {
     async init() {
         try {
             this.registerActions();
-            // 使用预加载的数据
-            const preloadedData = PreloadManager.getData('about') || await this.preloadData();
-            this.moduleInfo = preloadedData;
+            // 加载页面数据
+            this.moduleInfo = await this.preloadData();
             
             // 注册语言切换处理器
             this.boundLanguageHandler = this.onLanguageChanged.bind(this);

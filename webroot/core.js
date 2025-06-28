@@ -3,7 +3,7 @@
  * 提供Shell命令执行能力
  */
 
-const Core = {
+export const Core = {
     // 模块路径
     MODULE_PATH: '/data/adb/modules/AMMF/',
 
@@ -64,5 +64,7 @@ const Core = {
     }
 };
 
-// 导出核心模块到全局作用域
-window.Core = Core;
+// 为兼容性保留全局导出
+if (typeof window !== 'undefined') {
+    window.Core = Core;
+}

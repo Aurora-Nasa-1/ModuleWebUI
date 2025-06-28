@@ -3,7 +3,7 @@
  * 提供多语言支持功能
  */
 
-const I18n = {
+export const I18n = {
     currentLang: 'zh',
     supportedLangs: ['zh', 'en', 'ru'],
     translations: {
@@ -379,5 +379,7 @@ const I18n = {
     }
 };
 
-// 导出 I18n 模块
-window.I18n = I18n;
+// 为兼容性保留全局导出
+if (typeof window !== 'undefined') {
+    window.I18n = I18n;
+}

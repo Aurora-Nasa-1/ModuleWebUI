@@ -3,7 +3,16 @@
  * 提供日志查看和管理功能
  */
 
-const LogsPage = {
+export const LogsPage = {
+    // 页面配置
+    config: {
+        id: 'logs',
+        name: '日志',
+        icon: 'article',
+        module: 'LogsPage',
+        i18n_key: 'NAV_LOGS'
+    },
+    
     // 日志文件列表
     logFiles: {},
 
