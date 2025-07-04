@@ -6,7 +6,7 @@ on:
     branches: [ main ]
   # 推送到任何分支时触发（除了main，main由deploy.yml处理）
   push:
-    branches-ignore: [ main ]
+    branches: [ main ]
 
 jobs:
   # 代码检查和构建测试
