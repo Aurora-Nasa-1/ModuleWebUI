@@ -60,8 +60,8 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifact
-          path: dist/*
+          name: build-artifact}}-${{ github.run_id }}
+          path: dist/
 
   # 代码质量检查
   quality:
