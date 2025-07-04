@@ -57,6 +57,12 @@ jobs:
           ls -la dist/
           du -sh dist/
 
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact-
+          path: dist/
+
   # 代码质量检查
   quality:
     runs-on: ubuntu-latest
@@ -84,9 +90,3 @@ jobs:
           echo "Validating Vite configuration..."
           npx vite --version
           node -e "console.log('Vite config validation passed')"
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifact-
-          path: dist/
